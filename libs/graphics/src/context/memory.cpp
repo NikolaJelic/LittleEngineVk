@@ -10,9 +10,34 @@ vk::SharingMode QShare::operator()(Device const& device, QFlags queues) const {
 Memory::Memory(Device& device) : m_device(device) {
 	VmaAllocatorCreateInfo allocatorInfo = {};
 	Instance& inst = device.m_instance;
+	auto& dl = inst.m_loader;
 	allocatorInfo.instance = inst.m_instance;
 	allocatorInfo.device = device.m_device;
 	allocatorInfo.physicalDevice = device.m_physicalDevice;
+	VmaVulkanFunctions vkFunc = {};
+	vkFunc.vkGetPhysicalDeviceProperties = dl.vkGetPhysicalDeviceProperties;
+	vkFunc.vkGetPhysicalDeviceMemoryProperties = dl.vkGetPhysicalDeviceMemoryProperties;
+	vkFunc.vkAllocateMemory = dl.vkAllocateMemory;
+	vkFunc.vkFreeMemory = dl.vkFreeMemory;
+	vkFunc.vkMapMemory = dl.vkMapMemory;
+	vkFunc.vkUnmapMemory = dl.vkUnmapMemory;
+	vkFunc.vkFlushMappedMemoryRanges = dl.vkFlushMappedMemoryRanges;
+	vkFunc.vkInvalidateMappedMemoryRanges = dl.vkInvalidateMappedMemoryRanges;
+	vkFunc.vkBindBufferMemory = dl.vkBindBufferMemory;
+	vkFunc.vkBindImageMemory = dl.vkBindImageMemory;
+	vkFunc.vkGetBufferMemoryRequirements = dl.vkGetBufferMemoryRequirements;
+	vkFunc.vkGetImageMemoryRequirements = dl.vkGetImageMemoryRequirements;
+	vkFunc.vkCreateBuffer = dl.vkCreateBuffer;
+	vkFunc.vkDestroyBuffer = dl.vkDestroyBuffer;
+	vkFunc.vkCreateImage = dl.vkCreateImage;
+	vkFunc.vkDestroyImage = dl.vkDestroyImage;
+	vkFunc.vkCmdCopyBuffer = dl.vkCmdCopyBuffer;
+	vkFunc.vkGetBufferMemoryRequirements2KHR = dl.vkGetBufferMemoryRequirements2KHR;
+	vkFunc.vkGetImageMemoryRequirements2KHR = dl.vkGetImageMemoryRequirements2KHR;
+	vkFunc.vkBindBufferMemory2KHR = dl.vkBindBufferMemory2KHR;
+	vkFunc.vkBindImageMemory2KHR = dl.vkBindImageMemory2KHR;
+	vkFunc.vkGetPhysicalDeviceMemoryProperties2KHR = dl.vkGetPhysicalDeviceMemoryProperties2KHR;
+	allocatorInfo.pVulkanFunctions = &vkFunc;
 	vmaCreateAllocator(&allocatorInfo, &m_allocator);
 	for (auto& count : m_allocations) {
 		count.store(0);

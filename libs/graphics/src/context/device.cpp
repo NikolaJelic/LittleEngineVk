@@ -68,7 +68,8 @@ Device::Device(Instance& instance, vk::SurfaceKHR surface, CreateInfo const& inf
 	m_metadata.lineWidth.second = m_metadata.picked.properties.limits.lineWidthRange[1];
 	// TODO
 	// rd::ImageSamplers::clampDiffSpecCount(instance.deviceLimits.maxPerStageDescriptorSamplers);
-
+	// TODO
+	// Simplify queue selection
 	auto const queueFamilyProperties = m_metadata.picked.queueFamilies;
 	std::vector<vk::DeviceQueueCreateInfo> queueCreateInfos;
 	std::unordered_map<u32, QueueFamily> queueFamilies;
@@ -136,10 +137,12 @@ Device::Device(Instance& instance, vk::SurfaceKHR surface, CreateInfo const& inf
 	if (!found.test(QType::eTransfer)) {
 		queueData[(std::size_t)QType::eTransfer] = queueData[(std::size_t)QType::eGraphics];
 	}
+	// TODO: check before enabling
 	vk::PhysicalDeviceFeatures deviceFeatures;
 	deviceFeatures.fillModeNonSolid = true;
 	deviceFeatures.wideLines = m_metadata.lineWidth.second > 1.0f;
 	vk::PhysicalDeviceDescriptorIndexingFeatures descriptorIndexingFeatures;
+	// TODO: check before enabling
 	descriptorIndexingFeatures.runtimeDescriptorArray = true;
 	vk::DeviceCreateInfo deviceCreateInfo;
 	deviceCreateInfo.queueCreateInfoCount = (u32)queueCreateInfos.size();
@@ -154,6 +157,7 @@ Device::Device(Instance& instance, vk::SurfaceKHR surface, CreateInfo const& inf
 	deviceCreateInfo.ppEnabledExtensionNames = requiredExtensions.data();
 	m_device = m_physicalDevice.createDevice(deviceCreateInfo);
 	m_queues.setup(m_device, queueData);
+	instance.m_loader.init(m_device);
 	logD("[{}] Vulkan device constructed", g_name);
 	g_validationLevel = validationLevel;
 }

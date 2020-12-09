@@ -16,6 +16,9 @@ if("${CMAKE_CURRENT_SOURCE_DIR}" STREQUAL "${CMAKE_CURRENT_BINARY_DIR}")
 	message(FATAL_ERROR "In-source builds are not supported; choose a subdirectory like `out/*` or `build/*` for CMake output")
 endif()
 
+set(LEVK_FETCH_DIR "${CMAKE_CURRENT_SOURCE_DIR}/ext_fetch" CACHE STRING "CMake FetchContent root")
+set(FETCHCONTENT_BASE_DIR "${LEVK_FETCH_DIR}")
+
 # Includes
 include(FetchContent)
 include(cmake/platform.cmake)
@@ -62,7 +65,6 @@ endif()
 
 # Constants
 set(LEVK_GIT_COMMIT_HASH ${GIT_COMMIT_HASH} CACHE STRING "git commit hash" FORCE)
-set(EXT_DIR "${CMAKE_CURRENT_SOURCE_DIR}/external" CACHE INTERNAL "External dependencies root" FORCE)
 
 # Interface
 include(cmake/interface.cmake)
@@ -76,6 +78,9 @@ message(STATUS "[${CMAKE_SYSTEM_PROCESSOR}] [${PLATFORM}] [${CMAKE_GENERATOR}] [
 if(CI_BUILD)
 	message(STATUS "== CI Build ==")
 endif()
+
+# Vulkan
+add_subdirectory(ext/vulkan_hpp)
 
 # External
 add_subdirectory(ext/physfs)
@@ -108,50 +113,6 @@ if(NOT LEVK_LIBRARY_TYPE STREQUAL STATIC AND LEVK_USE_PCH)
 	set(LEVK_USE_PCH OFF CACHE BOOL "" FORCE)
 endif()
 
-# Vulkan
-find_package(Vulkan)
-if(NOT Vulkan_FOUND)
-	message(FATAL_ERROR 
-"Vulkan SDK not found! LittleEngineVk requires Vulkan ICD loader, headers, and validation layers, and SPIR-V cross!
-Note: for custom SDK locations, define `VULKAN_SDK` and source `vk-setup-env.sh` into this shell (and runtime environment).
-Make sure to delete CMakeCache.txt before re-configuring!"
-	)
-else()
-	set(SPIRV_CROSS_CLI OFF)
-	set(SPIRV_CROSS_ENABLE_CPP OFF)
-	set(SPIRV_CROSS_ENABLE_C_API OFF)
-	set(SPIRV_CROSS_ENABLE_GLSL ON)
-	set(SPIRV_CROSS_ENABLE_HLSL OFF)
-	set(SPIRV_CROSS_ENABLE_MSL OFF)
-	set(SPIRV_CROSS_ENABLE_REFLECT OFF)
-	set(SPIRV_CROSS_ENABLE_TESTS OFF)
-	set(SPIRV_CROSS_ENABLE_UTIL OFF)
-	set(SPIRV_CROSS_SHARED OFF)
-	set(SPIRV_CROSS_STATIC ON)
-	set(SPIRV-Cross_SOURCE "${Vulkan_INCLUDE_DIRS}/../../source/SPIRV-Cross")
-	if(EXISTS "${SPIRV-Cross_SOURCE}/CMakeLists.txt")
-		add_subdirectory("${SPIRV-Cross_SOURCE}" "${CMAKE_CURRENT_BINARY_DIR}/ext/SPIRV-Cross")
-	else()
-		FetchContent_Declare(
-			spirv-cross
-			GIT_REPOSITORY https://github.com/KhronosGroup/SPIRV-Cross
-			GIT_TAG 2020-09-17
-		)
-		message(STATUS "== Fetching SPIR-V Cross")
-		FetchContent_MakeAvailable(spirv-cross)
-		set(SPIRV-Cross_SOURCE "${spirv-cross_SOURCE_DIR}")
-	endif()
-	message(STATUS "== Vulkan ==\n\tHeaders : ${Vulkan_INCLUDE_DIRS}\n\tLibraries : ${Vulkan_LIBRARIES}\n\tSPIR-V Cross : ${SPIRV-Cross_SOURCE}")
-endif()
-
-# VMA
-target_link_libraries(vma PRIVATE ${Vulkan_LIBRARIES})
-target_include_directories(vma PRIVATE ${Vulkan_INCLUDE_DIRS})
-
-if(LEVK_USE_IMGUI)
-	target_include_directories(imgui PRIVATE ${Vulkan_INCLUDE_DIRS})
-endif()
-
 # Libraries
 configure_file("${CMAKE_CURRENT_SOURCE_DIR}/.appveyor.yml.in" "${CMAKE_CURRENT_SOURCE_DIR}/.appveyor.yml")
 add_subdirectory(libs/dlog)
@@ -160,7 +121,7 @@ add_subdirectory(libs/core)
 add_subdirectory(libs/window)
 add_subdirectory(libs/graphics)
 
-# Library
+# Engine
 set(LEVK_GENERATED "${CMAKE_CURRENT_BINARY_DIR}/src/generated/build_version.hpp")
 configure_file("${CMAKE_CURRENT_SOURCE_DIR}/src/build_version.hpp.in" "${CMAKE_CURRENT_BINARY_DIR}/src/generated/build_version.hpp")
 file(GLOB_RECURSE LEVK_INCLUDES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/include/*.?pp")

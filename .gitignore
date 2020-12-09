@@ -13,6 +13,10 @@ redist/*
 docs
 docs/*
 
+# FetchContent
+ext_fetch
+ext_fetch/*
+
 # RenderDoc capture config (local)
 *.cap
 # SPIR-V shaders (generated)
