@@ -6,6 +6,18 @@
 #include <core/ensure.hpp>
 #include <graphics/context/instance.hpp>
 
+[[maybe_unused]] static vk::DispatchLoaderDynamic g_dispatcher;
+
+#if defined(VULKAN_HPP_DISPATCH_LOADER_DYNAMIC) && VULKAN_HPP_DISPATCH_LOADER_DYNAMIC
+// Use default dispatcher
+#define VK_DISPATCHER VULKAN_HPP_DEFAULT_DISPATCHER
+// Allocate storage for default dispatcher
+VULKAN_HPP_DEFAULT_DISPATCH_LOADER_DYNAMIC_STORAGE;
+#else
+// Use custom dispatcher
+#define VK_DISPATCHER g_dispatcher
+#endif
+
 namespace le::graphics {
 // global for Device to temporarily disable (to suppress spam on Windows)
 dl::level g_validationLevel = dl::level::warning;
@@ -73,6 +85,8 @@ Instance& Instance::operator=(Instance&& rhs) {
 
 Instance::Instance(CreateInfo const& info) {
 	static constexpr char const* szValidationLayer = "VK_LAYER_KHRONOS_validation";
+	vk::DynamicLoader dl;
+	VK_DISPATCHER.init(dl.getProcAddress<PFN_vkGetInstanceProcAddr>("vkGetInstanceProcAddr"));
 	auto const layerProps = vk::enumerateInstanceLayerProperties();
 	m_metadata.layers.clear();
 	std::unordered_set<std::string_view> requiredExtensionsSet = {info.extensions.begin(), info.extensions.end()};
@@ -102,10 +116,8 @@ Instance::Instance(CreateInfo const& info) {
 	createInfo.ppEnabledLayerNames = m_metadata.layers.data();
 	createInfo.enabledLayerCount = (u32)m_metadata.layers.size();
 	m_instance = vk::createInstance(createInfo, nullptr);
-	vk::DynamicLoader dl;
-	m_loader = vk::DispatchLoaderDynamic();
-	m_loader.init(dl.getProcAddress<PFN_vkGetInstanceProcAddr>("vkGetInstanceProcAddr"));
-	m_loader.init(m_instance);
+	VK_DISPATCHER.init(m_instance);
+	m_loader = VK_DISPATCHER;
 	if (bValidation) {
 		vk::DebugUtilsMessengerCreateInfoEXT createInfo;
 		using vksev = vk::DebugUtilsMessageSeverityFlagBitsEXT;

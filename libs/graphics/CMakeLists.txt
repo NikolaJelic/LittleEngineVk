@@ -11,7 +11,7 @@ target_include_directories(${PROJECT_NAME}
 	PRIVATE
 		"${CMAKE_CURRENT_SOURCE_DIR}/src"
 )
-target_include_directories(${PROJECT_NAME} SYSTEM
+target_include_directories(${PROJECT_NAME} SYSTEM 
 	PUBLIC
 		"${SPIRV-Cross_SOURCE}"
 )
