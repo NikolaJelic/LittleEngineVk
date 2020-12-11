@@ -92,7 +92,7 @@ VRAM::Future VRAM::stage(View<Buffer> deviceBuffer, void const* pData, vk::Devic
 	auto ret = promise->get_future();
 	auto f = [p = std::move(promise), deviceBuffer, pData, size, this]() mutable {
 		auto stage = m_transfer.newStage(size);
-		if (write(*stage.buffer, pData, {0, size})) {
+		if (write(*stage.buffer, pData, {0, (std::size_t)size})) {
 			vk::CommandBufferBeginInfo beginInfo;
 			beginInfo.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit;
 			stage.command.begin(beginInfo);

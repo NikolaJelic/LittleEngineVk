@@ -1,5 +1,11 @@
 project(levk-core)
 
+# Android
+if(PLATFORM STREQUAL Android)
+	add_library(app-glue STATIC "${ANDROID_NDK}/sources/android/native_app_glue/android_native_app_glue.c")
+	target_include_directories(app-glue SYSTEM PUBLIC "${ANDROID_NDK}/sources/android/native_app_glue")
+endif()
+
 # Library
 file(GLOB_RECURSE SOURCES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/*.?pp")
 source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}" FILES ${SOURCES})
@@ -7,9 +13,7 @@ add_library(${PROJECT_NAME} STATIC ${SOURCES})
 
 # glm defines
 target_compile_definitions(${PROJECT_NAME} PUBLIC GLM_FORCE_RADIANS GLM_FORCE_DEPTH_ZERO_TO_ONE GLM_FORCE_SILENT_WARNINGS GLM_ENABLE_EXPERIMENTAL GLM_EXT_INCLUDED)
-
 target_include_directories(${PROJECT_NAME}
-
 	PUBLIC
 		"${CMAKE_CURRENT_SOURCE_DIR}/include"
 	PRIVATE
@@ -23,6 +27,9 @@ target_link_libraries(${PROJECT_NAME}
 		levk-interface
 		physfs-static
 		$<$<STREQUAL:${PLATFORM},Linux>:X11>
+		$<$<STREQUAL:${PLATFORM},Android>:log>
+		$<$<STREQUAL:${PLATFORM},Android>:android>
+		$<$<STREQUAL:${PLATFORM},Android>:app-glue>
 )
 
 # PCH

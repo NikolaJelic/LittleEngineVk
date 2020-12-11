@@ -5,15 +5,18 @@
 #include <core/log.hpp>
 #include <core/os.hpp>
 #include <core/threads.hpp>
-#if defined(LEVK_OS_WINX)
+#if defined(LEVK_OS_WINDOWS)
 #include <Windows.h>
-#elif defined(LEVK_OS_LINUX)
+#elif defined(LEVK_OS_LINUX) || defined(LEVK_OS_ANDROID)
 #include <cstring>
 #include <iostream>
 #include <fcntl.h>
 #include <signal.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#if defined(LEVK_OS_ANDROID)
+#include <android_native_app_glue.h>
+#endif
 #endif
 
 namespace le {
@@ -25,10 +28,12 @@ std::string g_exePathStr;
 std::deque<os::ArgsParser::entry> g_args;
 } // namespace
 
-os::Service::Service(os::Args args) {
-	if (g_exeLocation.empty() && args.argc > 0) {
-		os::args(args);
-	}
+#if defined(LEVK_OS_ANDROID)
+android_app* g_androidApp = nullptr;
+#endif
+
+os::Service::Service(os::Args const& args) {
+	os::args(args);
 	threads::init();
 }
 
@@ -36,7 +41,7 @@ os::Service::~Service() {
 	threads::joinAll();
 }
 
-void os::args(Args args) {
+void os::args(Args const& args) {
 	g_workingDir = io::absolute(io::current_path());
 	if (args.argc > 0) {
 		ArgsParser parser;
@@ -50,6 +55,11 @@ void os::args(Args args) {
 		g_exeLocation = g_exePath / g_exeLocation.filename();
 		g_args.pop_front();
 	}
+#if defined(LEVK_OS_ANDROID)
+	if (args.androidApp.contains<android_app*>()) {
+		g_androidApp = args.androidApp.get<android_app*>();
+	}
+#endif
 }
 
 std::string os::argv0() {
@@ -79,7 +89,7 @@ std::deque<os::ArgsParser::entry> const& os::args() noexcept {
 
 bool os::isDebuggerAttached() {
 	bool ret = false;
-#if defined(LEVK_OS_WINX)
+#if defined(LEVK_OS_WINDOWS)
 	ret = IsDebuggerPresent() != 0;
 #elif defined(LEVK_OS_LINUX)
 	char buf[4096];

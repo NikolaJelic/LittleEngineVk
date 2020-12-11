@@ -10,7 +10,7 @@ struct Bootstrap {
 	using MakeSurface = std::function<vk::SurfaceKHR(vk::Instance)>;
 	struct CreateInfo;
 
-	Bootstrap(CreateInfo const& info, MakeSurface const& makeSuface, glm::ivec2 framebufferSize);
+	Bootstrap(CreateInfo const& info, MakeSurface const& makeSuface, glm::ivec2 framebufferSize = {});
 
 	Instance instance;
 	Device device;
@@ -29,7 +29,7 @@ struct Bootstrap::CreateInfo {
 
 inline Bootstrap::Bootstrap(CreateInfo const& info, MakeSurface const& makeSurface, glm::ivec2 framebufferSize)
 	: instance(info.instance), device(instance, makeSurface(instance.m_instance), info.device), vram(device, info.transfer),
-	  swapchain(vram, framebufferSize, info.swapchain) {
+	  swapchain(vram, info.swapchain, framebufferSize) {
 	logD("[{}] Vulkan bootstrapped", g_name);
 }
 } // namespace le::graphics

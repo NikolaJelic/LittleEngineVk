@@ -23,6 +23,18 @@ void listDevices(Span<AvailableDevice> devices) {
 	str << "\n\n";
 	std::cout << str.str();
 }
+
+template <typename T, typename U>
+T const* fromNextChain(U* pNext, vk::StructureType type) {
+	if (pNext) {
+		auto* pIn = reinterpret_cast<vk::BaseInStructure const*>(pNext);
+		if (pIn->sType == type) {
+			return reinterpret_cast<T const*>(pIn);
+		}
+		return fromNextChain<T>(pIn->pNext, type);
+	}
+	return nullptr;
+}
 } // namespace
 
 // Prevent validation spam on Windows
@@ -64,8 +76,8 @@ Device::Device(Instance& instance, vk::SurfaceKHR surface, CreateInfo const& inf
 	}
 	m_physicalDevice = m_metadata.picked.physicalDevice;
 	m_metadata.limits = m_metadata.picked.properties.limits;
-	m_metadata.lineWidth.first = m_metadata.picked.properties.limits.lineWidthRange[0];
-	m_metadata.lineWidth.second = m_metadata.picked.properties.limits.lineWidthRange[1];
+	m_metadata.lineWidth.first = m_metadata.picked.properties.limits.lineWidthRange[0U];
+	m_metadata.lineWidth.second = m_metadata.picked.properties.limits.lineWidthRange[1U];
 	// TODO
 	// rd::ImageSamplers::clampDiffSpecCount(instance.deviceLimits.maxPerStageDescriptorSamplers);
 	// TODO
@@ -139,16 +151,19 @@ Device::Device(Instance& instance, vk::SurfaceKHR surface, CreateInfo const& inf
 	}
 	// TODO: check before enabling
 	vk::PhysicalDeviceFeatures deviceFeatures;
-	deviceFeatures.fillModeNonSolid = true;
-	deviceFeatures.wideLines = m_metadata.lineWidth.second > 1.0f;
-	vk::PhysicalDeviceDescriptorIndexingFeatures descriptorIndexingFeatures;
-	// TODO: check before enabling
-	descriptorIndexingFeatures.runtimeDescriptorArray = true;
+	deviceFeatures.fillModeNonSolid = m_metadata.picked.features2.features.fillModeNonSolid;
+	deviceFeatures.wideLines = m_metadata.picked.features2.features.wideLines;
+	using DIF = vk::PhysicalDeviceDescriptorIndexingFeatures;
+	DIF descriptorIndexingFeatures;
+	if (auto pIndexingFeatures = fromNextChain<DIF>(m_metadata.picked.features2.pNext, vk::StructureType::ePhysicalDeviceDescriptorIndexingFeatures)) {
+		// TODO: check before enabling
+		descriptorIndexingFeatures.runtimeDescriptorArray = pIndexingFeatures->runtimeDescriptorArray;
+	}
 	vk::DeviceCreateInfo deviceCreateInfo;
 	deviceCreateInfo.queueCreateInfoCount = (u32)queueCreateInfos.size();
 	deviceCreateInfo.pQueueCreateInfos = queueCreateInfos.data();
 	deviceCreateInfo.pEnabledFeatures = &deviceFeatures;
-	deviceCreateInfo.pNext = &descriptorIndexingFeatures;
+	// deviceCreateInfo.pNext = &descriptorIndexingFeatures;
 	if (!instance.m_metadata.layers.empty()) {
 		deviceCreateInfo.enabledLayerCount = (u32)instance.m_metadata.layers.size();
 		deviceCreateInfo.ppEnabledLayerNames = instance.m_metadata.layers.data();
@@ -177,7 +192,7 @@ std::vector<AvailableDevice> Device::availableDevices() const {
 			AvailableDevice availableDevice;
 			availableDevice.properties = physDev.getProperties();
 			availableDevice.queueFamilies = physDev.getQueueFamilyProperties();
-			availableDevice.features = physDev.getFeatures();
+			availableDevice.features2 = physDev.getFeatures2();
 			availableDevice.physicalDevice = physDev;
 			ret.push_back(std::move(availableDevice));
 		}

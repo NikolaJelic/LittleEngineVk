@@ -62,13 +62,15 @@ struct SwapchainCreateInfo {
 	vk::Extent2D extent(glm::ivec2 fbSize) const {
 		vk::Extent2D extent;
 		vk::SurfaceCapabilitiesKHR capabilities = pd.getSurfaceCapabilitiesKHR(surface);
+		if (fbSize.x == 0 || fbSize.y == 0) {
+			return capabilities.currentExtent;
+		}
 		if (capabilities.currentExtent.width != maths::max<u32>()) {
 			extent = capabilities.currentExtent;
 		} else {
 			extent = vk::Extent2D(std::clamp((u32)fbSize.x, capabilities.minImageExtent.width, capabilities.maxImageExtent.width),
 								  std::clamp((u32)fbSize.y, capabilities.minImageExtent.height, capabilities.maxImageExtent.height));
 		}
-		ENSURE(extent.width > 0 && extent.height > 0, "Invariant violated");
 		return extent;
 	}
 
@@ -108,7 +110,7 @@ Swapchain::Swapchain(VRAM& vram) : m_vram(vram), m_device(vram.m_device) {
 	m_metadata.surface = d.m_metadata.surface;
 }
 
-Swapchain::Swapchain(VRAM& vram, glm::ivec2 framebufferSize, CreateInfo const& info) : Swapchain(vram) {
+Swapchain::Swapchain(VRAM& vram, CreateInfo const& info, glm::ivec2 framebufferSize) : Swapchain(vram) {
 	m_metadata.info = info;
 	if (!construct(framebufferSize)) {
 		throw std::runtime_error("Failed to construct Vulkan swapchain");
@@ -206,10 +208,6 @@ vk::RenderPass Swapchain::renderPass() const noexcept {
 }
 
 bool Swapchain::construct(glm::ivec2 framebufferSize) {
-	if (!valid(framebufferSize)) {
-		m_storage.flags.set(Flag::ePaused);
-		return false;
-	}
 	VRAM& v = m_vram;
 	Device& d = v.m_device;
 	m_storage = {};
@@ -232,6 +230,10 @@ bool Swapchain::construct(glm::ivec2 framebufferSize) {
 		createInfo.surface = m_metadata.surface;
 		createInfo.preTransform = info.transform;
 		m_storage.extent = createInfo.imageExtent = info.extent(framebufferSize);
+		if (m_storage.extent.width <= 0 || m_storage.extent.height <= 0) {
+			m_storage.flags.set(Flag::ePaused);
+			return false;
+		}
 		m_storage.swapchain = d.m_device.createSwapchainKHR(createInfo);
 		m_metadata.formats.colour = info.colourFormat.format;
 		m_metadata.formats.depth = info.depthFormat;

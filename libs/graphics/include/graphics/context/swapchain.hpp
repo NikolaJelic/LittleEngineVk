@@ -60,14 +60,14 @@ class Swapchain {
 	static constexpr bool valid(glm::ivec2 framebufferSize) noexcept;
 
 	Swapchain(VRAM& vram);
-	Swapchain(VRAM& vram, glm::ivec2 framebufferSize, CreateInfo const& info);
+	Swapchain(VRAM& vram, CreateInfo const& info, glm::ivec2 framebufferSize = {});
 	Swapchain(Swapchain&&);
 	Swapchain& operator=(Swapchain&&);
 	~Swapchain();
 
 	std::optional<RenderTarget> acquireNextImage(vk::Semaphore setDrawReady);
 	bool present(vk::Semaphore drawWait, vk::Fence onDrawn);
-	bool reconstruct(glm::ivec2 framebufferSize, Span<vk::PresentModeKHR> desiredModes = {});
+	bool reconstruct(glm::ivec2 framebufferSize = {}, Span<vk::PresentModeKHR> desiredModes = {});
 
 	Flags flags() const noexcept;
 	bool suboptimal() const noexcept;

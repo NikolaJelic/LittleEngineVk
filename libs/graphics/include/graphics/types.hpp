@@ -52,7 +52,7 @@ struct AvailableDevice final {
 
 	vk::PhysicalDevice physicalDevice;
 	vk::PhysicalDeviceProperties properties;
-	vk::PhysicalDeviceFeatures features;
+	vk::PhysicalDeviceFeatures2 features2;
 	std::vector<vk::QueueFamilyProperties> queueFamilies;
 };
 

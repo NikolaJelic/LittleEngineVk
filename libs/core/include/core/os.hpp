@@ -3,6 +3,7 @@
 #include <string>
 #include <vector>
 #include <fmt/format.h>
+#include <core/erased_ref.hpp>
 #include <core/io/path.hpp>
 #include <core/std_types.hpp>
 #include <kt/args_parser/args_parser.hpp>
@@ -15,7 +16,7 @@ enum class Compiler : s8 { eClang, eGCC, eVCXX, eUnknown };
 } // namespace le::os
 
 #if (defined(_WIN32) || defined(_WIN64))
-#define LEVK_OS_WINX
+#define LEVK_OS_WINDOWS
 inline constexpr le::os::OS levk_OS = le::os::OS::eWindows;
 inline constexpr std::string_view levk_OS_name = "Windows";
 #if defined(__arm__)
@@ -32,13 +33,14 @@ inline constexpr le::os::Arch levk_arch = le::os::Arch::eX64;
 inline constexpr std::string_view levk_arch_name = "x64";
 #endif
 #elif defined(__linux__)
+#if defined(__ANDROID__)
+#define LEVK_OS_ANDROID
+inline constexpr le::os::OS levk_OS = le::os::OS::eAndroid;
+inline constexpr std::string_view levk_OS_name = "Android";
+#else
 #define LEVK_OS_LINUX
 inline constexpr le::os::OS levk_OS = le::os::OS::eLinux;
 inline constexpr std::string_view levk_OS_name = "Linux";
-#if defined(__ANDROID__)
-inline constexpr le::os::OS levk_OS = le::os::OS::eAndroid;
-inline constexpr std::string_view levk_OS_name = "Android";
-#define LEVK_OS_ANDROID
 #endif
 #if defined(__arm__)
 #define LEVK_ARCH_ARM64
@@ -103,6 +105,9 @@ enum class Dir : s8 { eWorking, eExecutable, eCOUNT_ };
 struct Args {
 	s32 argc = 0;
 	char const* const* argv = nullptr;
+#if defined(LEVK_OS_ANDROID)
+	ErasedRef androidApp;
+#endif
 };
 
 using ArgsParser = kt::args_parser<>;
@@ -112,14 +117,14 @@ using ArgsParser = kt::args_parser<>;
 /// Destructor joins all running threads
 ///
 struct Service final {
-	Service(Args args);
+	Service(Args const& args);
 	~Service();
 };
 
 ///
 /// \brief Initialise OS service
 ///
-void args(Args args);
+void args(Args const& args);
 ///
 /// \brief Obtain `argv[0]`
 ///

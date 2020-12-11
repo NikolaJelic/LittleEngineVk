@@ -8,7 +8,57 @@
 #include <core/utils.hpp>
 #include <io_impl.hpp>
 
+#if defined(LEVK_OS_ANDROID)
+#include <android_native_app_glue.h>
+#endif
+
 namespace le::io {
+
+#if defined(LEVK_OS_ANDROID)
+extern android_app* g_androidApp;
+
+struct AndroidAsset {
+	AAsset* pAsset = nullptr;
+
+	AndroidAsset() = default;
+	AndroidAsset(Path const& path) {
+		if (g_androidApp && g_androidApp->activity) {
+			pAsset = AAssetManager_open(g_androidApp->activity->assetManager, path.generic_string().data(), AASSET_MODE_BUFFER);
+		}
+	}
+
+	~AndroidAsset() {
+		if (pAsset && g_androidApp && g_androidApp->activity) {
+			AAsset_close(pAsset);
+		}
+	}
+
+	constexpr explicit operator bool() const noexcept {
+		return pAsset != nullptr;
+	}
+
+	bytearray bytes() const {
+		bytearray ret;
+		if (pAsset) {
+			ret.resize((std::size_t)AAsset_getLength(pAsset));
+			AAsset_read(pAsset, ret.data(), ret.size());
+		}
+		return ret;
+	}
+
+	std::stringstream sstream() const {
+		std::stringstream ret;
+		if (pAsset) {
+			std::string charBuf((std::size_t)AAsset_getLength(pAsset), 0);
+			AAsset_read(pAsset, charBuf.data(), charBuf.size());
+			ret << charBuf;
+		}
+		return ret;
+	}
+};
+
+#endif
+
 namespace {
 struct PhysfsHandle final {
 	bool bInit = false;
@@ -74,7 +124,10 @@ std::string_view Reader::medium() const {
 	return m_medium;
 }
 
-Reader::Result<io::Path> FileReader::findUpwards(io::Path const& leaf, Span<io::Path> anyOf, u8 maxHeight) {
+Reader::Result<io::Path> FileReader::findUpwards([[maybe_unused]] io::Path const& leaf, [[maybe_unused]] Span<io::Path> anyOf, [[maybe_unused]] u8 maxHeight) {
+#if defined(LEVK_OS_ANDROID)
+	return {};
+#else
 	for (auto const& name : anyOf) {
 		if (io::is_directory(leaf / name) || io::is_regular_file(leaf / name)) {
 			auto ret = leaf.filename() == "." ? leaf.parent_path() : leaf;
@@ -86,13 +139,17 @@ Reader::Result<io::Path> FileReader::findUpwards(io::Path const& leaf, Span<io::
 		return {};
 	}
 	return findUpwards(leaf.parent_path(), anyOf, maxHeight - 1);
+#endif
 }
 
 FileReader::FileReader() noexcept {
 	m_medium = "Filesystem";
 }
 
-bool FileReader::mount(io::Path path) {
+bool FileReader::mount([[maybe_unused]] io::Path path) {
+#if defined(LEVK_OS_ANDROID)
+	return false;
+#else
 	auto const pathStr = path.generic_string();
 	if (std::find(m_dirs.begin(), m_dirs.end(), path) == m_dirs.end()) {
 		if (!io::is_directory(path)) {
@@ -105,9 +162,16 @@ bool FileReader::mount(io::Path path) {
 	}
 	logW("[{}] [{}] directory already mounted", utils::tName<FileReader>(), pathStr);
 	return false;
+#endif
 }
 
 Reader::Result<bytearray> FileReader::bytes(io::Path const& id) const {
+#if defined(LEVK_OS_ANDROID)
+	if (auto asset = AndroidAsset(id)) {
+		return asset.bytes();
+	}
+	return {};
+#else
 	if (auto path = findPrefixed(id)) {
 		std::ifstream file(path->generic_string(), std::ios::binary | std::ios::ate);
 		if (file.good()) {
@@ -119,9 +183,16 @@ Reader::Result<bytearray> FileReader::bytes(io::Path const& id) const {
 		}
 	}
 	return {};
+#endif
 }
 
 Reader::Result<std::stringstream> FileReader::sstream(io::Path const& id) const {
+#if defined(LEVK_OS_ANDROID)
+	if (auto asset = AndroidAsset(id)) {
+		return asset.sstream();
+	}
+	return {};
+#else
 	if (auto path = findPrefixed(id)) {
 		std::ifstream file(path->generic_string());
 		if (file.good()) {
@@ -131,9 +202,17 @@ Reader::Result<std::stringstream> FileReader::sstream(io::Path const& id) const 
 		}
 	}
 	return {};
+#endif
 }
 
 Reader::Result<io::Path> FileReader::findPrefixed(io::Path const& id) const {
+#if defined(LEVK_OS_ANDROID)
+	if (auto asset = AndroidAsset(id)) {
+		return Path(id);
+	} else {
+		return {};
+	}
+#else
 	auto const paths = finalPaths(id);
 	for (auto const& path : paths) {
 		if (io::is_regular_file(path)) {
@@ -141,6 +220,7 @@ Reader::Result<io::Path> FileReader::findPrefixed(io::Path const& id) const {
 		}
 	}
 	return {};
+#endif
 }
 
 std::vector<io::Path> FileReader::finalPaths(io::Path const& id) const {

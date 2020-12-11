@@ -8,21 +8,18 @@ set(TARGET_NAME levk-engine)
 set(LEVK_VERSION 0.0.1.0 CACHE STRING "Application Version" FORCE)
 project(LittleEngineVk VERSION ${LEVK_VERSION})
 
-if(NOT ${CMAKE_SIZEOF_VOID_P} EQUAL 8)
-	message(FATAL_ERROR "Unsupported architecture, must be 64-bit")
-endif()
-
 if("${CMAKE_CURRENT_SOURCE_DIR}" STREQUAL "${CMAKE_CURRENT_BINARY_DIR}")
 	message(FATAL_ERROR "In-source builds are not supported; choose a subdirectory like `out/*` or `build/*` for CMake output")
 endif()
-
-set(LEVK_FETCH_DIR "${CMAKE_CURRENT_SOURCE_DIR}/ext_fetch" CACHE STRING "CMake FetchContent root")
-set(FETCHCONTENT_BASE_DIR "${LEVK_FETCH_DIR}")
 
 # Includes
 include(FetchContent)
 include(cmake/platform.cmake)
 include(cmake/utils.cmake)
+
+if(NOT PLATFORM STREQUAL Android AND NOT ${CMAKE_SIZEOF_VOID_P} EQUAL 8)
+	message(WARNING "Unsupported architecture, must be 64-bit")
+endif()
 
 # Options
 option(LEVK_USE_PCH "Generate pre-compiled header" ON)
@@ -31,29 +28,38 @@ if(${PLATFORM} STREQUAL Android)
 	option(LEVK_VULKAN_DYNAMIC "Load Vulkan dynamically" ON)
 else()
 	option(LEVK_VULKAN_DYNAMIC "Load Vulkan dynamically" OFF)
-endif()
-option(LEVK_BUILD_DEMO "Build demo" ON)
-if("$CMAKE_BUILD_TYPE" STREQUAL "Debug")
-	option(LEVK_EDITOR "Enable Editor" ON)
-else()
-	option(LEVK_EDITOR "Enable Editor" OFF)
+	if("$CMAKE_BUILD_TYPE" STREQUAL "Debug")
+		option(LEVK_EDITOR "Enable Editor" ON)
+	else()
+		option(LEVK_EDITOR "Enable Editor" OFF)
+	endif()
 endif()
 if(NOT ${CMAKE_VERSION} VERSION_GREATER_EQUAL "3.16")
 	set(LEVK_USE_PCH OFF CACHE BOOL "" FORCE)
 endif()
 if("${CMAKE_CURRENT_SOURCE_DIR}" STREQUAL "${CMAKE_SOURCE_DIR}")
 	option(LEVK_BUILD_TESTS "Build Tests" ON)
+	option(LEVK_BUILD_DEMO "Build demo" ON)
 else()
 	option(LEVK_BUILD_TESTS "Build Tests" OFF)
+	option(LEVK_BUILD_DEMO "Build demo" OFF)
+endif()
+
+if(PLATFORM STREQUAL Android)
+	if(LEVK_EDITOR OR LEVK_USE_GLFW OR LEVK_USE_IMGUI)
+		message(FATAL_ERROR "Cannot build Android with LEVK_EDITOR or LEVK_USE_GLFW or LEVK_USE_IMGUI!")
+	endif()
+	if(NOT LEVK_VULKAN_DYNAMIC)
+		message(FATAL_ERROR "Cannot build Android without LEVK_VULKAN_DYNAMIC!")
+	endif()
 endif()
 if(LEVK_EDITOR)
-	if(NOT LEVK_USE_GLFW)
-		message(FATAL_ERROR "Cannot build Editor without GLFW and ImGui!")
+	if(NOT LEVK_USE_GLFW OR NOT LEVK_USE_IMGUI)
+		message(FATAL_ERROR "Cannot build Editor without LEVK_USE_GLFW and LEVK_USE_IMGUI!")
 	endif()
-	set(LEVK_USE_IMGUI ON CACHE BOOL "" FORCE)
 endif()
 if(LEVK_USE_IMGUI AND LEVK_VULKAN_DYNAMIC)
-	message(FATAL_ERROR "Cannot build ImGui with LEVK_VULKAN_DYNAMIC!")
+	message(FATAL_ERROR "Cannot have both LEVK_USE_IMGUI and LEVK_VULKAN_DYNAMIC set!")
 endif()
 
 # Git operations
@@ -99,7 +105,7 @@ if(LEVK_USE_GLFW)
 	set(GLFW_BUILD_EXAMPLES OFF CACHE INTERNAL "" FORCE)
 	set(GLFW_BUILD_TESTS OFF CACHE INTERNAL "" FORCE)
 	add_subdirectory(ext/glfw)
-	if(WIN64_CLANG)
+	if(WINDOWS_CLANG)
 		target_compile_options(glfw PRIVATE -Wno-everything)
 	endif()
 endif()
@@ -141,8 +147,6 @@ target_include_directories(${TARGET_NAME} SYSTEM
 	INTERFACE
 		"${CMAKE_CURRENT_SOURCE_DIR}/include"
 		"${CMAKE_CURRENT_BINARY_DIR}/src/generated"
-	PRIVATE
-		"${Vulkan_INCLUDE_DIRS}"
 )
 target_include_directories(${TARGET_NAME}
 	PRIVATE
@@ -157,7 +161,6 @@ target_link_libraries(${TARGET_NAME}
 		djson
 	PRIVATE
 		levk-interface
-		${Vulkan_LIBRARIES}
 		$<$<STREQUAL:${PLATFORM},Linux>:X11>
 		$<$<BOOL:${LEVK_USE_GLFW}>:glfw>
 		$<$<BOOL:${LEVK_USE_IMGUI}>:imgui>

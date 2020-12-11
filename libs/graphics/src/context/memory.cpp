@@ -11,9 +11,9 @@ Memory::Memory(Device& device) : m_device(device) {
 	VmaAllocatorCreateInfo allocatorInfo = {};
 	Instance& inst = device.m_instance;
 	auto& dl = inst.m_loader;
-	allocatorInfo.instance = inst.m_instance;
-	allocatorInfo.device = device.m_device;
-	allocatorInfo.physicalDevice = device.m_physicalDevice;
+	allocatorInfo.instance = static_cast<VkInstance>(inst.m_instance);
+	allocatorInfo.device = static_cast<VkDevice>(device.m_device);
+	allocatorInfo.physicalDevice = static_cast<VkPhysicalDevice>(device.m_physicalDevice);
 	VmaVulkanFunctions vkFunc = {};
 	vkFunc.vkGetPhysicalDeviceProperties = dl.vkGetPhysicalDeviceProperties;
 	vkFunc.vkGetPhysicalDeviceMemoryProperties = dl.vkGetPhysicalDeviceMemoryProperties;
@@ -81,14 +81,14 @@ View<Buffer> Memory::construct(Buffer::CreateInfo const& info, [[maybe_unused]] 
 	if (vmaCreateBuffer(m_allocator, &vkBufferInfo, &createInfo, &vkBuffer, &buffer.handle, nullptr) != VK_SUCCESS) {
 		throw std::runtime_error("Allocation error");
 	}
-	buffer.buffer = vkBuffer;
+	buffer.buffer = vk::Buffer(vkBuffer);
 	buffer.queueFlags = info.queueFlags;
 	buffer.mode = bufferInfo.sharingMode;
 	buffer.usage = info.usage;
 	buffer.type = info.vmaUsage == VMA_MEMORY_USAGE_GPU_ONLY ? Buffer::Type::eGpuOnly : Buffer::Type::eCpuToGpu;
 	VmaAllocationInfo allocationInfo;
 	vmaGetAllocationInfo(m_allocator, buffer.handle, &allocationInfo);
-	buffer.info = {allocationInfo.deviceMemory, allocationInfo.offset, allocationInfo.size};
+	buffer.info = {vk::DeviceMemory(allocationInfo.deviceMemory), allocationInfo.offset, allocationInfo.size};
 	m_allocations[(std::size_t)ResourceType::eBuffer].fetch_add(buffer.writeSize);
 	if (m_bLogAllocs) {
 		if (!bSilent) {
@@ -152,7 +152,7 @@ bool Memory::write(Buffer& out_buffer, void const* pData, Buffer::Span const& ra
 		return false;
 	}
 	if (!default_v(out_buffer.info.memory) && !default_v(out_buffer.buffer)) {
-		std::size_t const size = range.size == 0 ? out_buffer.writeSize : range.size;
+		std::size_t const size = range.size == 0 ? (std::size_t)out_buffer.writeSize : range.size;
 		if (mapMemory(out_buffer)) {
 			void* pStart = (void*)((char*)out_buffer.pMap + range.offset);
 			std::memcpy(pStart, pData, size);
@@ -182,12 +182,12 @@ View<Image> Memory::construct(Image::CreateInfo const& info) {
 		throw std::runtime_error("Allocation error");
 	}
 	ret.extent = info.createInfo.extent;
-	ret.image = vkImage;
+	ret.image = vk::Image(vkImage);
 	auto const requirements = d.m_device.getImageMemoryRequirements(ret.image);
 	ret.queueFlags = info.queueFlags;
 	VmaAllocationInfo allocationInfo;
 	vmaGetAllocationInfo(m_allocator, ret.handle, &allocationInfo);
-	ret.info = {allocationInfo.deviceMemory, allocationInfo.offset, allocationInfo.size};
+	ret.info = {vk::DeviceMemory(allocationInfo.deviceMemory), allocationInfo.offset, allocationInfo.size};
 	ret.allocatedSize = requirements.size;
 	ret.mode = imageInfo.sharingMode;
 	m_allocations[(std::size_t)ResourceType::eImage].fetch_add(ret.allocatedSize);
@@ -227,7 +227,7 @@ std::string Memory::logCount() {
 
 void Memory::destroyImpl(Buffer& out_buffer, bool bSilent) {
 	unmapMemory(out_buffer);
-	vmaDestroyBuffer(m_allocator, out_buffer.buffer, out_buffer.handle);
+	vmaDestroyBuffer(m_allocator, static_cast<VkBuffer>(out_buffer.buffer), out_buffer.handle);
 	m_allocations[(std::size_t)ResourceType::eBuffer].fetch_sub(out_buffer.writeSize);
 	if (m_bLogAllocs) {
 		if (!bSilent) {
@@ -243,7 +243,7 @@ void Memory::destroyImpl(Buffer& out_buffer, bool bSilent) {
 	}
 }
 void Memory::destroyImpl(Image& out_image) {
-	vmaDestroyImage(m_allocator, out_image.image, out_image.handle);
+	vmaDestroyImage(m_allocator, static_cast<VkImage>(out_image.image), out_image.handle);
 	m_allocations[(std::size_t)ResourceType::eImage].fetch_sub(out_image.allocatedSize);
 	if (m_bLogAllocs) {
 		if (out_image.info.actualSize > 0) {
