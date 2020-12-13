@@ -92,7 +92,7 @@ Instance::Instance(CreateInfo const& info) {
 	std::unordered_set<std::string_view> requiredExtensionsSet = {info.extensions.begin(), info.extensions.end()};
 	bool bValidation = false;
 	// TODO: Fix Pixel drawing nothing on Android
-	if (info.bValidation && levk_OS != os::OS::eAndroid) {
+	if (info.bValidation /*&& levk_OS != os::OS::eAndroid*/) {
 		if (!findLayer(layerProps, szValidationLayer, dl::level::warning)) {
 			ENSURE(false, "Validation layers requested but not present!");
 		} else {
@@ -109,7 +109,7 @@ Instance::Instance(CreateInfo const& info) {
 	appInfo.applicationVersion = VK_MAKE_VERSION(1, 0, 0);
 	appInfo.pEngineName = "LittleEngineVk";
 	appInfo.engineVersion = VK_MAKE_VERSION(0, 0, 1);
-	appInfo.apiVersion = VK_API_VERSION_1_0;
+	appInfo.apiVersion = VK_API_VERSION_1_1;
 	vk::InstanceCreateInfo createInfo;
 	createInfo.pApplicationInfo = &appInfo;
 	createInfo.ppEnabledExtensionNames = m_metadata.extensions.data();
@@ -120,7 +120,7 @@ Instance::Instance(CreateInfo const& info) {
 	VK_DISPATCHER.init(m_instance);
 	m_loader = VK_DISPATCHER;
 	// TODO: Fix Debug Utils Messenger crash on Android
-	if (bValidation && levk_OS != os::OS::eAndroid) {
+	if (bValidation /*&& levk_OS != os::OS::eAndroid*/) {
 		vk::DebugUtilsMessengerCreateInfoEXT createInfo;
 		using vksev = vk::DebugUtilsMessageSeverityFlagBitsEXT;
 		createInfo.messageSeverity = vksev::eError | vksev::eWarning | vksev::eInfo | vksev::eVerbose;

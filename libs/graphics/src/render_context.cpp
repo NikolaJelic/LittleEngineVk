@@ -119,6 +119,9 @@ RenderContext::~RenderContext() {
 }
 
 bool RenderContext::waitForFrame() {
+	if (!m_vram.get().m_transfer.polling()) {
+		m_vram.get().m_transfer.update();
+	}
 	if (m_storage.status == Status::eReady) {
 		return true;
 	}

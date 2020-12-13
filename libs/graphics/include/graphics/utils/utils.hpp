@@ -32,6 +32,8 @@ Shader::ResourcesMap shaderResources(Shader const& shader);
 std::optional<io::Path> compileGlsl(io::Path const& src, io::Path dst = {}, io::Path const& prefix = {}, bool bDebug = levk_debug);
 SetBindings extractBindings(Shader const& shader);
 
+bytearray convert(std::initializer_list<u8> bytes);
+bytearray convert(Span<u8> bytes);
 RawImage decompress(bytearray compressed, u8 channels = 4);
 void release(RawImage rawImage);
 } // namespace utils

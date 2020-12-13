@@ -39,7 +39,7 @@ class Texture {
 	struct Storage {
 		Data data;
 		struct {
-			std::vector<Span<u8>> bytes;
+			std::vector<Span<std::byte>> bytes;
 			std::vector<RawImage> imgs;
 		} raw;
 		VRAM::Future transfer;
@@ -53,7 +53,7 @@ struct Texture::Compressed {
 	std::vector<bytearray> bytes;
 };
 struct Texture::Raw {
-	std::vector<u8> bytes;
+	bytearray bytes;
 	glm::ivec2 size = {};
 };
 struct Texture::CreateInfo {

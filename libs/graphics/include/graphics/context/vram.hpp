@@ -19,7 +19,7 @@ class VRAM final : public Memory {
 
 	[[nodiscard]] Future copy(CView<Buffer> src, View<Buffer> dst, vk::DeviceSize size = 0);
 	[[nodiscard]] Future stage(View<Buffer> deviceBuffer, void const* pData, vk::DeviceSize size = 0);
-	[[nodiscard]] Future copy(Span<Span<u8>> pixelsArr, View<Image> dst, LayoutTransition layouts);
+	[[nodiscard]] Future copy(Span<Span<std::byte>> pixelsArr, View<Image> dst, LayoutTransition layouts);
 
 	void defer(View<Buffer> buffer, u64 defer = Deferred::defaultDefer);
 	void defer(View<Image> image, u64 defer = Deferred::defaultDefer);

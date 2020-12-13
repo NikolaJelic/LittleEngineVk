@@ -50,7 +50,7 @@ bool Mesh::valid() const {
 }
 
 bool Mesh::busy() const {
-	if (m_type == Type::eStatic) {
+	if (m_type == Type::eDynamic) {
 		return false;
 	}
 	return !utils::ready(m_vbo.transfer) || !utils::ready(m_ibo.transfer);

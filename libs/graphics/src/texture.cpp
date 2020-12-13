@@ -5,7 +5,8 @@
 
 namespace le::graphics {
 namespace {
-std::future<void> load(VRAM& vram, View<Image>& out_image, vk::Format format, glm::ivec2 size, Span<Span<u8>> bytes, [[maybe_unused]] std::string_view name) {
+using sv = std::string_view;
+std::future<void> load(VRAM& vram, View<Image>& out_image, vk::Format format, glm::ivec2 size, Span<Span<std::byte>> bytes, [[maybe_unused]] sv name) {
 	Image::CreateInfo imageInfo;
 	imageInfo.queueFlags = QType::eTransfer | QType::eGraphics;
 	imageInfo.createInfo.format = format;
@@ -65,6 +66,10 @@ bool Texture::construct(CreateInfo const& info) {
 		m_storage.data.size = {m_storage.raw.imgs.back().width, m_storage.raw.imgs.back().height};
 		m_storage.data.type = pComp->bytes.size() > 1 ? Type::eCube : Type::e2D;
 	} else {
+		if (std::size_t(pRaw->size.x * pRaw->size.y) * 4 /*channels*/ != pRaw->bytes.size()) {
+			ENSURE(false, "Invalid Raw image size/dimensions");
+			return false;
+		}
 		m_storage.data.size = pRaw->size;
 		m_storage.raw.bytes.push_back(pRaw->bytes.back());
 		m_storage.data.type = Type::e2D;

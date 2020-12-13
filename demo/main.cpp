@@ -115,7 +115,7 @@ int main(int argc, char** argv) {
 			graphics::Texture texC("container", boot.vram), texR("red", boot.vram), sky("sky_dusk", boot.vram);
 			graphics::Texture::CreateInfo texInfo;
 			graphics::Texture::Raw raw;
-			raw.bytes = {0xff, 0, 0, 0xff};
+			raw.bytes = graphics::utils::convert({0xff, 0, 0, 0xff});
 			raw.size = {1, 1};
 			graphics::Texture::Compressed comp = {{std::move(*tex0)}};
 			graphics::Texture::Compressed cm = {std::move(cubemap)};

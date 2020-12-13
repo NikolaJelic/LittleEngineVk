@@ -110,7 +110,7 @@ VRAM::Future VRAM::stage(View<Buffer> deviceBuffer, void const* pData, vk::Devic
 	return ret;
 }
 
-VRAM::Future VRAM::copy(Span<Span<u8>> pixelsArr, View<Image> dst, LayoutTransition layouts) {
+VRAM::Future VRAM::copy(Span<Span<std::byte>> pixelsArr, View<Image> dst, LayoutTransition layouts) {
 	if (!dst) {
 		return {};
 	}
@@ -126,17 +126,24 @@ VRAM::Future VRAM::copy(Span<Span<u8>> pixelsArr, View<Image> dst, LayoutTransit
 	ENSURE(indices.size() == 1 || dst->mode == vk::SharingMode::eConcurrent, "Exclusive queues!");
 	auto promise = Transfer::makePromise();
 	auto ret = promise->get_future();
-	auto f = [p = std::move(promise), pixelsArr, dst, layouts, imgSize, layerSize, this]() mutable {
+	std::vector<bytearray> data;
+	data.reserve(pixelsArr.size());
+	for (auto layer : pixelsArr) {
+		bytearray bytes(layer.size(), {});
+		std::memcpy(bytes.data(), layer.data(), bytes.size());
+		data.push_back(std::move(bytes));
+	}
+	auto f = [p = std::move(promise), d = std::move(data), dst, layouts, imgSize, layerSize, this]() mutable {
 		auto stage = m_transfer.newStage(imgSize);
 		[[maybe_unused]] bool const bResult = mapMemory(*stage.buffer);
 		ENSURE(bResult, "Memory map failed");
 		u32 layerIdx = 0;
-		u32 const layerCount = (u32)pixelsArr.extent;
+		u32 const layerCount = (u32)d.size();
 		std::vector<vk::BufferImageCopy> copyRegions;
-		for (auto pixels : pixelsArr) {
+		for (auto const& pixels : d) {
 			auto const offset = layerIdx * layerSize;
 			void* pStart = (u8*)stage.buffer->pMap + offset;
-			std::memcpy(pStart, pixels.data(), pixels.extent);
+			std::memcpy(pStart, pixels.data(), pixels.size());
 			vk::BufferImageCopy copyRegion;
 			copyRegion.bufferOffset = offset;
 			copyRegion.bufferRowLength = 0;

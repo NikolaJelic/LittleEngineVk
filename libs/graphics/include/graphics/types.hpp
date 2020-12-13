@@ -115,7 +115,7 @@ struct Image final : VkResource {
 };
 
 struct RawImage {
-	Span<u8> bytes;
+	Span<std::byte> bytes;
 	int width = 0;
 	int height = 0;
 };
