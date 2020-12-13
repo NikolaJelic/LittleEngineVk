@@ -1,4 +1,5 @@
 #pragma once
+#include <core/os.hpp>
 #include <dumb_log/log.hpp>
 
 namespace le {

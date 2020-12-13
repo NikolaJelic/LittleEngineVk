@@ -26,7 +26,12 @@ class Queues final {
 	std::vector<u32> familyIndices(QFlags flags) const;
 	void submit(QType type, vk::ArrayProxy<vk::SubmitInfo const> const& infos, vk::Fence signal);
 	vk::Result present(vk::PresentInfoKHR const& info);
-	void waitIdle(QType type) const;
+	void waitIdle(QType type);
+
+	template <template <typename...> typename L = std::scoped_lock>
+	auto lockMutex() {
+		return m_mutex.lock<L>();
+	}
 
   private:
 	Queue& queue(QType type) noexcept {

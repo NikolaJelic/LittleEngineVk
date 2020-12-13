@@ -30,6 +30,6 @@ struct Bootstrap::CreateInfo {
 inline Bootstrap::Bootstrap(CreateInfo const& info, MakeSurface const& makeSurface, glm::ivec2 framebufferSize)
 	: instance(info.instance), device(instance, makeSurface(instance.m_instance), info.device), vram(device, info.transfer),
 	  swapchain(vram, info.swapchain, framebufferSize) {
-	logD("[{}] Vulkan bootstrapped", g_name);
+	logD("[{}] Vulkan bootstrapped [{}] [{}]", g_name, levk_OS_name, levk_arch_name);
 }
 } // namespace le::graphics

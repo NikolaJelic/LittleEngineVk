@@ -24,13 +24,12 @@ Mesh::~Mesh() {
 }
 
 Mesh::Storage Mesh::construct(std::string_view name, vk::BufferUsageFlags usage, void* pData, std::size_t size) const {
-	VRAM& v = m_vram;
 	Storage ret;
-	ret.data.buffer = v.createBO(name, size, usage, m_type == Type::eDynamic);
+	ret.data.buffer = m_vram.get().createBO(name, size, usage, m_type == Type::eDynamic);
 	if (m_type == Type::eStatic) {
-		ret.transfer = v.stage(ret.data.buffer, pData, size);
+		ret.transfer = m_vram.get().stage(ret.data.buffer, pData, size);
 	} else {
-		[[maybe_unused]] bool const bRes = v.write(ret.data.buffer, pData, {0, size});
+		[[maybe_unused]] bool const bRes = m_vram.get().write(ret.data.buffer, pData, {0, size});
 		ENSURE(bRes, "Write failure");
 	}
 	return ret;
@@ -38,8 +37,7 @@ Mesh::Storage Mesh::construct(std::string_view name, vk::BufferUsageFlags usage,
 
 void Mesh::destroy() {
 	VRAM& v = m_vram;
-	Device& d = v.m_device;
-	d.defer([&v, vb = m_vbo.data, ib = m_ibo.data]() mutable {
+	v.m_device.get().defer([&v, vb = m_vbo.data, ib = m_ibo.data]() mutable {
 		v.destroy(vb.buffer);
 		v.destroy(ib.buffer);
 	});
@@ -64,8 +62,7 @@ bool Mesh::ready() const {
 
 void Mesh::wait() {
 	if (m_type == Type::eDynamic) {
-		VRAM& v = m_vram;
-		v.wait({m_vbo.transfer, m_ibo.transfer});
+		m_vram.get().wait({m_vbo.transfer, m_ibo.transfer});
 	}
 }
 } // namespace le::graphics

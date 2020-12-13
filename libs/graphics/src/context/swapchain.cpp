@@ -16,22 +16,29 @@ constexpr T bestFit(U&& all, V&& desired, T fallback) noexcept {
 	return fallback;
 }
 
+[[maybe_unused]] constexpr vk::Extent2D oriented(vk::Extent2D extent, vk::SurfaceTransformFlagBitsKHR transform) noexcept {
+	if (transform & vk::SurfaceTransformFlagBitsKHR::eRotate90 || transform & vk::SurfaceTransformFlagBitsKHR::eRotate270) {
+		return {extent.height, extent.width};
+	}
+	return extent;
+}
+
 struct SwapchainCreateInfo {
-	SwapchainCreateInfo(vk::PhysicalDevice pd, vk::SurfaceKHR surface, Swapchain::CreateInfo const& options) : pd(pd), surface(surface) {
+	SwapchainCreateInfo(vk::PhysicalDevice pd, vk::SurfaceKHR surface, Swapchain::CreateInfo const& info) : pd(pd), surface(surface) {
 		vk::SurfaceCapabilitiesKHR capabilities = pd.getSurfaceCapabilitiesKHR(surface);
 		std::vector<vk::SurfaceFormatKHR> colourFormats = pd.getSurfaceFormatsKHR(surface);
 		availableModes = pd.getSurfacePresentModesKHR(surface);
 		std::map<u32, vk::SurfaceFormatKHR> ranked;
 		for (auto const& available : colourFormats) {
 			u32 spaceRank = 0;
-			for (auto desired : options.desired.colourSpaces) {
+			for (auto desired : info.desired.colourSpaces) {
 				if (desired == available.colorSpace) {
 					break;
 				}
 				++spaceRank;
 			}
 			u32 formatRank = 0;
-			for (auto desired : options.desired.colourFormats) {
+			for (auto desired : info.desired.colourFormats) {
 				if (desired == available.format) {
 					break;
 				}
@@ -40,7 +47,7 @@ struct SwapchainCreateInfo {
 			ranked.emplace(spaceRank + formatRank, available);
 		}
 		colourFormat = ranked.begin()->second;
-		for (auto format : options.desired.depthFormats) {
+		for (auto format : info.desired.depthFormats) {
 			vk::FormatProperties const props = pd.getFormatProperties(format);
 			static constexpr auto features = vk::FormatFeatureFlagBits::eDepthStencilAttachment;
 			if ((props.optimalTilingFeatures & features) == features) {
@@ -51,27 +58,32 @@ struct SwapchainCreateInfo {
 		if (default_v(depthFormat)) {
 			depthFormat = vk::Format::eD16Unorm;
 		}
-		presentMode = bestFit(availableModes, options.desired.presentModes, availableModes.front());
-		transform = capabilities.currentTransform;
+		presentMode = bestFit(availableModes, info.desired.presentModes, availableModes.front());
 		imageCount = capabilities.minImageCount + 1;
 		if (capabilities.maxImageCount > 0 && capabilities.maxImageCount < imageCount) {
 			imageCount = capabilities.maxImageCount;
 		}
+		if (capabilities.supportedCompositeAlpha & vk::CompositeAlphaFlagBitsKHR::eOpaque) {
+			compositeAlpha = vk::CompositeAlphaFlagBitsKHR::eOpaque;
+		} else if (capabilities.supportedCompositeAlpha & vk::CompositeAlphaFlagBitsKHR::eInherit) {
+			compositeAlpha = vk::CompositeAlphaFlagBitsKHR::eInherit;
+		} else if (capabilities.supportedCompositeAlpha & vk::CompositeAlphaFlagBitsKHR::ePreMultiplied) {
+			compositeAlpha = vk::CompositeAlphaFlagBitsKHR::ePreMultiplied;
+		} else {
+			compositeAlpha = vk::CompositeAlphaFlagBitsKHR::ePostMultiplied;
+		}
 	}
 
-	vk::Extent2D extent(glm::ivec2 fbSize) const {
-		vk::Extent2D extent;
+	vk::Extent2D extent(glm::ivec2 fbSize) {
 		vk::SurfaceCapabilitiesKHR capabilities = pd.getSurfaceCapabilitiesKHR(surface);
-		if (fbSize.x == 0 || fbSize.y == 0) {
+		current.transform = capabilities.currentTransform;
+		current.extent = capabilities.currentExtent;
+		if (!Swapchain::valid(fbSize) || current.extent.width != maths::max<u32>()) {
 			return capabilities.currentExtent;
-		}
-		if (capabilities.currentExtent.width != maths::max<u32>()) {
-			extent = capabilities.currentExtent;
 		} else {
-			extent = vk::Extent2D(std::clamp((u32)fbSize.x, capabilities.minImageExtent.width, capabilities.maxImageExtent.width),
-								  std::clamp((u32)fbSize.y, capabilities.minImageExtent.height, capabilities.maxImageExtent.height));
+			return vk::Extent2D(std::clamp((u32)fbSize.x, capabilities.minImageExtent.width, capabilities.maxImageExtent.width),
+								std::clamp((u32)fbSize.y, capabilities.minImageExtent.height, capabilities.maxImageExtent.height));
 		}
-		return extent;
 	}
 
 	vk::PhysicalDevice pd;
@@ -80,7 +92,8 @@ struct SwapchainCreateInfo {
 	vk::SurfaceFormatKHR colourFormat;
 	vk::Format depthFormat = {};
 	vk::PresentModeKHR presentMode = {};
-	vk::SurfaceTransformFlagBitsKHR transform;
+	vk::CompositeAlphaFlagBitsKHR compositeAlpha;
+	Swapchain::Display current;
 	u32 imageCount = 0;
 };
 
@@ -103,11 +116,10 @@ Swapchain::Frame& Swapchain::Storage::frame() {
 }
 
 Swapchain::Swapchain(VRAM& vram) : m_vram(vram), m_device(vram.m_device) {
-	Device& d = vram.m_device;
-	if (!d.valid(d.m_metadata.surface)) {
+	if (!m_device.get().valid(m_device.get().m_metadata.surface)) {
 		throw std::runtime_error("Invalid surface");
 	}
-	m_metadata.surface = d.m_metadata.surface;
+	m_metadata.surface = m_device.get().m_metadata.surface;
 }
 
 Swapchain::Swapchain(VRAM& vram, CreateInfo const& info, glm::ivec2 framebufferSize) : Swapchain(vram) {
@@ -116,22 +128,24 @@ Swapchain::Swapchain(VRAM& vram, CreateInfo const& info, glm::ivec2 framebufferS
 		throw std::runtime_error("Failed to construct Vulkan swapchain");
 	}
 	makeRenderPass();
-	logD("[{}] Vulkan swapchain constructed", g_name);
+	auto const extent = m_storage.current.extent;
+	auto const mode = presentModeName(m_metadata.presentMode);
+	logD("[{}] Vulkan swapchain constructed [{}x{}] [{}]", g_name, extent.width, extent.height, mode);
 }
 
 Swapchain::~Swapchain() {
 	logD_if(!default_v(m_storage.swapchain), "[{}] Vulkan swapchain destroyed", g_name);
-	destroy(true);
+	destroy(m_storage, true);
 }
 
 std::optional<RenderTarget> Swapchain::acquireNextImage(vk::Semaphore setDrawReady) {
+	orientCheck();
 	if (m_storage.flags.any(Flag::ePaused | Flag::eOutOfDate)) {
 		return std::nullopt;
 	}
-	Device& d = static_cast<VRAM&>(m_vram).m_device;
 	std::optional<vk::ResultValue<u32>> acquire;
 	try {
-		acquire = d.m_device.acquireNextImageKHR(m_storage.swapchain, maths::max<u64>(), setDrawReady, {});
+		acquire = m_device.get().m_device.acquireNextImageKHR(m_storage.swapchain, maths::max<u64>(), setDrawReady, {});
 		setFlags(m_storage.flags, acquire->result);
 	} catch (vk::OutOfDateKHRError const& e) {
 		m_storage.flags.set(Flag::eOutOfDate);
@@ -144,15 +158,15 @@ std::optional<RenderTarget> Swapchain::acquireNextImage(vk::Semaphore setDrawRea
 	}
 	m_storage.imageIndex = (u32)acquire->value;
 	auto& frame = m_storage.frame();
-	d.waitFor(frame.drawn);
+	m_device.get().waitFor(frame.drawn);
 	return frame.target;
 }
 
 bool Swapchain::present(vk::Semaphore drawWait, vk::Fence onDrawn) {
+	orientCheck();
 	if (m_storage.flags.any(Flag::ePaused | Flag::eOutOfDate)) {
 		return false;
 	}
-	Device& d = static_cast<VRAM&>(m_vram).m_device;
 	Frame& frame = m_storage.frame();
 	vk::PresentInfoKHR presentInfo;
 	auto const index = m_storage.imageIndex;
@@ -163,7 +177,7 @@ bool Swapchain::present(vk::Semaphore drawWait, vk::Fence onDrawn) {
 	presentInfo.pImageIndices = &index;
 	vk::Result result;
 	try {
-		result = d.m_queues.present(presentInfo);
+		result = m_device.get().m_queues.present(presentInfo);
 	} catch (vk::OutOfDateKHRError const& e) {
 		logD("[{}] Swapchain Failed to present image [{}]", g_name, e.what());
 		m_storage.flags.set(Flag::eOutOfDate);
@@ -179,16 +193,18 @@ bool Swapchain::present(vk::Semaphore drawWait, vk::Fence onDrawn) {
 }
 
 bool Swapchain::reconstruct(glm::ivec2 framebufferSize, Span<vk::PresentModeKHR> desiredModes) {
-	destroy(false);
 	if (!desiredModes.empty()) {
 		m_metadata.info.desired.presentModes = desiredModes;
 	}
-	if (construct(framebufferSize)) {
-		logD("[{}] Vulkan swapchain reconstructed", g_name);
-		return true;
-	}
-	logW_if(!m_storage.flags.test(Flag::ePaused), "[{}] Vulkan swapchain reconstruction failed!", g_name);
-	return false;
+	Storage retired = m_storage;
+	m_metadata.retired = retired.swapchain;
+	bool const bResult = construct(framebufferSize);
+	auto const extent = m_storage.current.extent;
+	auto const mode = presentModeName(m_metadata.presentMode);
+	logD_if(bResult, "[{}] Vulkan swapchain reconstructed [{}x{}] [{}]", g_name, extent.width, extent.height, mode);
+	destroy(retired, false);
+	logW_if(!bResult && !m_storage.flags.test(Flag::ePaused), "[{}] Vulkan swapchain reconstruction failed!", g_name);
+	return bResult;
 }
 
 Swapchain::Flags Swapchain::flags() const noexcept {
@@ -208,10 +224,8 @@ vk::RenderPass Swapchain::renderPass() const noexcept {
 }
 
 bool Swapchain::construct(glm::ivec2 framebufferSize) {
-	VRAM& v = m_vram;
-	Device& d = v.m_device;
 	m_storage = {};
-	SwapchainCreateInfo info(d.m_physicalDevice, m_metadata.surface, m_metadata.info);
+	SwapchainCreateInfo info(m_device.get().m_physicalDevice, m_metadata.surface, m_metadata.info);
 	m_metadata.availableModes = std::move(info.availableModes);
 	{
 		vk::SwapchainCreateInfoKHR createInfo;
@@ -220,31 +234,37 @@ bool Swapchain::construct(glm::ivec2 framebufferSize) {
 		createInfo.imageColorSpace = info.colourFormat.colorSpace;
 		createInfo.imageArrayLayers = 1;
 		createInfo.imageUsage = vk::ImageUsageFlagBits::eColorAttachment;
-		auto const indices = d.m_queues.familyIndices(QType::eGraphics | QType::ePresent);
+		auto const indices = m_device.get().m_queues.familyIndices(QType::eGraphics | QType::ePresent);
 		createInfo.imageSharingMode = indices.size() == 1 ? vk::SharingMode::eExclusive : vk::SharingMode::eConcurrent;
 		createInfo.pQueueFamilyIndices = indices.data();
 		createInfo.queueFamilyIndexCount = (u32)indices.size();
-		createInfo.compositeAlpha = vk::CompositeAlphaFlagBitsKHR::eOpaque;
-		createInfo.presentMode = info.presentMode;
+		createInfo.compositeAlpha = info.compositeAlpha;
+		m_metadata.presentMode = createInfo.presentMode = info.presentMode;
 		createInfo.clipped = vk::Bool32(true);
 		createInfo.surface = m_metadata.surface;
-		createInfo.preTransform = info.transform;
-		m_storage.extent = createInfo.imageExtent = info.extent(framebufferSize);
-		if (m_storage.extent.width <= 0 || m_storage.extent.height <= 0) {
+		createInfo.oldSwapchain = m_metadata.retired;
+		createInfo.imageExtent = info.extent(framebufferSize);
+		createInfo.preTransform = vk::SurfaceTransformFlagBitsKHR::eIdentity;
+		if (createInfo.imageExtent.width <= 0 || createInfo.imageExtent.height <= 0) {
 			m_storage.flags.set(Flag::ePaused);
 			return false;
 		}
-		m_storage.swapchain = d.m_device.createSwapchainKHR(createInfo);
+		m_storage.current = info.current;
+		m_storage.swapchain = m_device.get().m_device.createSwapchainKHR(createInfo);
 		m_metadata.formats.colour = info.colourFormat.format;
 		m_metadata.formats.depth = info.depthFormat;
+		if (!m_metadata.original) {
+			m_metadata.original = info.current;
+		}
+		m_metadata.retired = vk::SwapchainKHR();
 	}
 	{
-		auto images = d.m_device.getSwapchainImagesKHR(m_storage.swapchain);
+		auto images = m_device.get().m_device.getSwapchainImagesKHR(m_storage.swapchain);
 		m_storage.frames.reserve(images.size());
 		Image::CreateInfo depthImageInfo;
 		depthImageInfo.createInfo.format = info.depthFormat;
 		depthImageInfo.vmaUsage = VMA_MEMORY_USAGE_GPU_ONLY;
-		depthImageInfo.createInfo.extent = vk::Extent3D(m_storage.extent, 1);
+		depthImageInfo.createInfo.extent = vk::Extent3D(m_storage.current.extent, 1);
 		depthImageInfo.createInfo.tiling = vk::ImageTiling::eOptimal;
 		depthImageInfo.createInfo.usage = vk::ImageUsageFlagBits::eDepthStencilAttachment;
 		depthImageInfo.createInfo.samples = vk::SampleCountFlagBits::e1;
@@ -254,17 +274,17 @@ bool Swapchain::construct(glm::ivec2 framebufferSize) {
 		depthImageInfo.createInfo.arrayLayers = 1;
 		depthImageInfo.queueFlags = QType::eGraphics;
 		depthImageInfo.name = "swapchain_depth";
-		m_storage.depthImage = v.construct(depthImageInfo);
-		m_storage.depthImageView = d.createImageView(m_storage.depthImage.image, info.depthFormat, vk::ImageAspectFlagBits::eDepth);
+		m_storage.depthImage = m_vram.get().construct(depthImageInfo);
+		m_storage.depthImageView = m_device.get().createImageView(m_storage.depthImage.image, info.depthFormat, vk::ImageAspectFlagBits::eDepth);
 		auto const format = info.colourFormat.format;
 		auto const aspectFlags = vk::ImageAspectFlagBits::eColor;
 		for (auto const& image : images) {
 			Frame frame;
 			frame.target.colour.image = image;
 			frame.target.depth.image = m_storage.depthImage.image;
-			frame.target.colour.view = d.createImageView(image, format, aspectFlags);
+			frame.target.colour.view = m_device.get().createImageView(image, format, aspectFlags);
 			frame.target.depth.view = m_storage.depthImageView;
-			frame.target.extent = m_storage.extent;
+			frame.target.extent = m_storage.current.extent;
 			ENSURE(frame.target.extent.width > 0 && frame.target.extent.height > 0, "Invariant violated");
 			m_storage.frames.push_back(std::move(frame));
 		}
@@ -312,20 +332,32 @@ void Swapchain::makeRenderPass() {
 	dependency.srcStageMask = vk::PipelineStageFlagBits::eColorAttachmentOutput;
 	dependency.dstStageMask = vk::PipelineStageFlagBits::eColorAttachmentOutput;
 	dependency.dstAccessMask = vk::AccessFlagBits::eColorAttachmentRead | vk::AccessFlagBits::eColorAttachmentWrite;
-	Device& d = m_device;
-	m_metadata.renderPass = d.createRenderPass(attachments, subpass, dependency);
+	m_metadata.renderPass = m_device.get().createRenderPass(attachments, subpass, dependency);
 }
 
-void Swapchain::destroy(bool bMeta) {
-	VRAM& v = m_vram;
-	Device& d = v.m_device;
+void Swapchain::destroy(Storage& out_storage, bool bMeta) {
 	auto r = bMeta ? std::exchange(m_metadata.renderPass, vk::RenderPass()) : vk::RenderPass();
-	d.m_queues.waitIdle(QType::eGraphics);
-	for (auto& frame : m_storage.frames) {
-		d.destroy(frame.target.colour.view);
+	m_device.get().m_queues.waitIdle(QType::eGraphics);
+	auto lock = m_device.get().m_queues.lockMutex();
+	for (auto& frame : out_storage.frames) {
+		m_device.get().destroy(frame.target.colour.view);
 	}
-	d.destroy(m_storage.depthImageView, m_storage.swapchain, r);
-	v.destroy(m_storage.depthImage);
-	m_storage = {};
+	m_device.get().destroy(out_storage.depthImageView, out_storage.swapchain, r);
+	m_vram.get().destroy(out_storage.depthImage);
+	out_storage = {};
+}
+
+void Swapchain::orientCheck() {
+	auto const capabilities = m_device.get().m_physicalDevice.getSurfaceCapabilitiesKHR(m_metadata.surface);
+	if (capabilities.currentTransform != m_storage.current.transform) {
+		using vkst = vk::SurfaceTransformFlagBitsKHR;
+		auto const c = capabilities.currentTransform;
+		if (m_metadata.original->transform == vkst::eIdentity || m_metadata.original->transform == vkst::eRotate180) {
+			m_storage.flags[Flag::eRotated] = c == vkst::eRotate90 || c == vkst::eRotate270;
+		} else if (m_metadata.original->transform == vkst::eRotate90 || m_metadata.original->transform == vkst::eRotate270) {
+			m_storage.flags[Flag::eRotated] = c == vkst::eIdentity || c == vkst::eRotate180;
+		}
+		m_storage.current.transform = capabilities.currentTransform;
+	}
 }
 } // namespace le::graphics

@@ -16,7 +16,6 @@ vk::BufferUsageFlags toFlags(vk::DescriptorType type) noexcept {
 } // namespace
 
 DescriptorSet::DescriptorSet(VRAM& vram, CreateInfo const& info) : m_vram(vram), m_device(vram.m_device) {
-	Device& device = m_device;
 	m_storage.rotateCount = (u32)info.rotateCount;
 	m_storage.layout = info.layout;
 	m_storage.setNumber = info.setNumber;
@@ -35,8 +34,8 @@ DescriptorSet::DescriptorSet(VRAM& vram, CreateInfo const& info) : m_vram(vram),
 			set.bindings[b].name = bindingInfo.name;
 			logD("[{}] DescriptorSet [{}] binding [{}] [{}] constructed", g_name, info.setNumber, b, bindingInfo.name);
 		}
-		set.pool = device.createDescriptorPool(poolSizes, 1);
-		set.set = device.allocateDescriptorSets(set.pool, m_storage.layout, 1).front();
+		set.pool = m_device.get().createDescriptorPool(poolSizes, 1);
+		set.set = m_device.get().allocateDescriptorSets(set.pool, m_storage.layout, 1).front();
 		m_storage.setBuffer.push(std::move(set));
 	}
 }
@@ -88,7 +87,6 @@ bool DescriptorSet::writeBuffers(u32 binding, void* pData, std::size_t size, std
 	auto& bind = set.bindings[binding];
 	ENSURE(bind.type == type, "Mismatched descriptor type");
 	ENSURE(bind.count == (u32)count, "Mismatched descriptor count");
-	VRAM& vram = m_vram;
 	bool bStale = bind.buffers.size() != count;
 	bind.buffers.resize((std::size_t)count);
 	if (!bStale) {
@@ -116,12 +114,11 @@ bool DescriptorSet::writeBuffers(u32 binding, void* pData, std::size_t size, std
 		descWrite.descriptorType = type;
 		descWrite.descriptorCount = (u32)bufferInfos.size();
 		descWrite.pBufferInfo = bufferInfos.data();
-		Device& d = m_device;
-		d.m_device.updateDescriptorSets(descWrite, {});
+		m_device.get().m_device.updateDescriptorSets(descWrite, {});
 	}
 	for (std::size_t i = 0; i < count; ++i) {
 		void* pStart = (void*)((u8*)pData + i);
-		if (!vram.write(bind.buffers[i], pStart, {0, size})) {
+		if (!m_vram.get().write(bind.buffers[i], pStart, {0, size})) {
 			return false;
 		}
 	}
@@ -148,8 +145,7 @@ void DescriptorSet::updateBuffers(u32 binding, Span<CView<Buffer>> buffers, std:
 	descWrite.descriptorType = type;
 	descWrite.descriptorCount = (u32)bufferInfos.size();
 	descWrite.pBufferInfo = bufferInfos.data();
-	Device& d = m_device;
-	d.m_device.updateDescriptorSets(descWrite, {});
+	m_device.get().m_device.updateDescriptorSets(descWrite, {});
 }
 
 bool DescriptorSet::updateCIS(u32 binding, std::vector<CIS> cis) {
@@ -186,8 +182,7 @@ bool DescriptorSet::updateCIS(u32 binding, std::vector<CIS> cis) {
 		descWrite.descriptorType = vk::DescriptorType::eCombinedImageSampler;
 		descWrite.descriptorCount = (u32)imageInfos.size();
 		descWrite.pImageInfo = imageInfos.data();
-		Device& d = m_device;
-		d.m_device.updateDescriptorSets(descWrite, {});
+		m_device.get().m_device.updateDescriptorSets(descWrite, {});
 		bind.cis = std::move(cis);
 	}
 	return true;
@@ -221,8 +216,7 @@ void DescriptorSet::destroy() {
 View<Buffer> DescriptorSet::resize(View<Buffer> old, std::size_t size, vk::DescriptorType type, std::string_view name) const {
 	VRAM& vram = m_vram;
 	if (old) {
-		Device& device = m_device;
-		device.defer([b = old, &vram]() mutable { vram.destroy(b); });
+		m_device.get().defer([b = old, &vram]() mutable { vram.destroy(b); });
 	}
 	return vram.createBO(name, size, toFlags(type), true);
 }

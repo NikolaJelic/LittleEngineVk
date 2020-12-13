@@ -49,8 +49,7 @@ VRAM::Future VRAM::copy(CView<Buffer> src, View<Buffer> dst, vk::DeviceSize size
 		logE("[{}] Source buffer is larger than destination buffer!", g_name);
 		return {};
 	}
-	Device& d = m_device;
-	[[maybe_unused]] auto const indices = d.m_queues.familyIndices(QType::eGraphics | QType::eTransfer);
+	[[maybe_unused]] auto const indices = m_device.get().m_queues.familyIndices(QType::eGraphics | QType::eTransfer);
 	if (indices.size() > 1) {
 		ENSURE(sq.test() <= 1 || src->mode == vk::SharingMode::eConcurrent, "Unsupported sharing mode!");
 		ENSURE(dq.test() <= 1 || dst->mode == vk::SharingMode::eConcurrent, "Unsupported sharing mode!");
@@ -79,8 +78,7 @@ VRAM::Future VRAM::stage(View<Buffer> deviceBuffer, void const* pData, vk::Devic
 	if (size == 0) {
 		size = deviceBuffer->writeSize;
 	}
-	Device& d = m_device;
-	auto const indices = d.m_queues.familyIndices(QType::eGraphics | QType::eTransfer);
+	auto const indices = m_device.get().m_queues.familyIndices(QType::eGraphics | QType::eTransfer);
 	ENSURE(indices.size() == 1 || deviceBuffer->mode == vk::SharingMode::eConcurrent, "Exclusive queues!");
 	bool const bQueueFlags = deviceBuffer->queueFlags.test(QType::eTransfer);
 	ENSURE(bQueueFlags, "Invalid queue flags!");
@@ -88,16 +86,18 @@ VRAM::Future VRAM::stage(View<Buffer> deviceBuffer, void const* pData, vk::Devic
 		logE("[{}] Invalid queue flags on source buffer!", g_name);
 		return {};
 	}
+	bytearray data((std::size_t)size, {});
+	std::memcpy(data.data(), pData, data.size());
 	auto promise = Transfer::makePromise();
 	auto ret = promise->get_future();
-	auto f = [p = std::move(promise), deviceBuffer, pData, size, this]() mutable {
-		auto stage = m_transfer.newStage(size);
-		if (write(*stage.buffer, pData, {0, (std::size_t)size})) {
+	auto f = [p = std::move(promise), deviceBuffer, d = std::move(data), this]() mutable {
+		auto stage = m_transfer.newStage(vk::DeviceSize(d.size()));
+		if (write(*stage.buffer, d.data(), {0, d.size()})) {
 			vk::CommandBufferBeginInfo beginInfo;
 			beginInfo.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit;
 			stage.command.begin(beginInfo);
 			vk::BufferCopy copyRegion;
-			copyRegion.size = size;
+			copyRegion.size = vk::DeviceSize(d.size());
 			stage.command.copyBuffer(stage.buffer->buffer, deviceBuffer->buffer, copyRegion);
 			stage.command.end();
 			m_transfer.addStage(std::move(stage), std::move(p));
@@ -122,8 +122,7 @@ VRAM::Future VRAM::copy(Span<Span<u8>> pixelsArr, View<Image> dst, LayoutTransit
 		imgSize += layerSize;
 	}
 	ENSURE(layerSize > 0 && imgSize > 0, "Invalid image data!");
-	Device& d = m_device;
-	[[maybe_unused]] auto const indices = d.m_queues.familyIndices(QType::eGraphics | QType::eTransfer);
+	[[maybe_unused]] auto const indices = m_device.get().m_queues.familyIndices(QType::eGraphics | QType::eTransfer);
 	ENSURE(indices.size() == 1 || dst->mode == vk::SharingMode::eConcurrent, "Exclusive queues!");
 	auto promise = Transfer::makePromise();
 	auto ret = promise->get_future();
@@ -192,16 +191,14 @@ VRAM::Future VRAM::copy(Span<Span<u8>> pixelsArr, View<Image> dst, LayoutTransit
 
 void VRAM::defer(View<Buffer> buffer, u64 defer) {
 	if (buffer) {
-		Device& d = m_device;
-		d.defer([this, b = buffer]() { destroy(b); }, defer);
+		m_device.get().defer([this, b = buffer]() { destroy(b); }, defer);
 		*buffer = {};
 	}
 }
 
 void VRAM::defer(View<Image> image, u64 defer) {
 	if (image) {
-		Device& d = m_device;
-		d.defer([this, i = image]() { destroy(i); }, defer);
+		m_device.get().defer([this, i = image]() { destroy(i); }, defer);
 		*image = {};
 	}
 }

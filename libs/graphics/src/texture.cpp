@@ -71,8 +71,7 @@ bool Texture::construct(CreateInfo const& info) {
 	}
 	m_storage.transfer = load(m_vram, m_storage.data.image, info.format, m_storage.data.size, m_storage.raw.bytes, m_name);
 	m_storage.data.format = info.format;
-	VRAM& v = m_vram;
-	Device& d = v.m_device;
+	Device& d = m_vram.get().m_device;
 	vk::ImageViewType const type = m_storage.data.type == Type::eCube ? vk::ImageViewType::eCube : vk::ImageViewType::e2D;
 	m_storage.data.imageView = d.createImageView(m_storage.data.image->image, m_storage.data.format, vk::ImageAspectFlagBits::eColor, type);
 	return true;

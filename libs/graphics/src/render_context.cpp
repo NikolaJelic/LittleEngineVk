@@ -28,8 +28,7 @@ RenderContext::Render::~Render() {
 
 void RenderContext::Render::destroy() {
 	if (!default_v(m_frame.primary.m_cmd)) {
-		RenderContext& rc = m_context;
-		if (!rc.endFrame()) {
+		if (!m_context.get().endFrame()) {
 			logD("[{}] RenderContext failed to end frame", g_name);
 		}
 	}
@@ -127,10 +126,9 @@ bool RenderContext::waitForFrame() {
 		logW("[{}] Invalid RenderContext status", g_name);
 		return false;
 	}
-	Device& d = m_device;
 	auto& sync = m_sync.get();
-	d.waitFor(sync.drawing);
-	d.decrementDeferred();
+	m_device.get().waitFor(sync.drawing);
+	m_device.get().decrementDeferred();
 	m_storage.status = Status::eReady;
 	return true;
 }
@@ -140,23 +138,21 @@ std::optional<RenderContext::Frame> RenderContext::beginFrame(CommandBuffer::Pas
 		logW("[{}] Invalid RenderContext status", g_name);
 		return std::nullopt;
 	}
-	Device& d = m_device;
-	Swapchain& s = m_swapchain;
-	if (s.flags().any(Swapchain::Flag::ePaused | Swapchain::Flag::eOutOfDate)) {
+	if (m_swapchain.get().flags().any(Swapchain::Flag::ePaused | Swapchain::Flag::eOutOfDate)) {
 		return std::nullopt;
 	}
 	FrameSync& sync = m_sync.get();
-	auto target = s.acquireNextImage(sync.drawReady);
+	auto target = m_swapchain.get().acquireNextImage(sync.drawReady);
 	if (!target) {
 		return std::nullopt;
 	}
 	m_storage.status = Status::eDrawing;
-	d.destroy(sync.framebuffer);
-	sync.framebuffer = d.createFramebuffer(s.renderPass(), target->attachments(), target->extent);
-	if (!sync.primary.commandBuffer.begin(s.renderPass(), sync.framebuffer, target->extent, info)) {
+	m_device.get().destroy(sync.framebuffer);
+	sync.framebuffer = m_device.get().createFramebuffer(m_swapchain.get().renderPass(), target->attachments(), target->extent);
+	if (!sync.primary.commandBuffer.begin(m_swapchain.get().renderPass(), sync.framebuffer, target->extent, info)) {
 		ENSURE(false, "Failed to begin recording command buffer");
-		d.destroy(sync.framebuffer, sync.drawReady);
-		sync.drawReady = d.createSemaphore(); // sync.drawReady will be signalled by acquireNextImage and cannot be reused
+		m_device.get().destroy(sync.framebuffer, sync.drawReady);
+		sync.drawReady = m_device.get().createSemaphore(); // sync.drawReady will be signalled by acquireNextImage and cannot be reused
 		return std::nullopt;
 	}
 	return Frame{*target, sync.primary.commandBuffer};
@@ -176,8 +172,6 @@ bool RenderContext::endFrame() {
 		logW("[{}] Invalid RenderContext status", g_name);
 		return false;
 	}
-	Device& d = m_device;
-	Swapchain& s = m_swapchain;
 	FrameSync& sync = m_sync.get();
 	sync.primary.commandBuffer.end();
 	vk::SubmitInfo submitInfo;
@@ -189,10 +183,10 @@ bool RenderContext::endFrame() {
 	submitInfo.pCommandBuffers = &sync.primary.commandBuffer.m_cmd;
 	submitInfo.signalSemaphoreCount = 1;
 	submitInfo.pSignalSemaphores = &sync.presentReady;
-	d.m_device.resetFences(sync.drawing);
-	d.m_queues.submit(QType::eGraphics, submitInfo, sync.drawing);
+	m_device.get().m_device.resetFences(sync.drawing);
+	m_device.get().m_queues.submit(QType::eGraphics, submitInfo, sync.drawing);
 	m_storage.status = Status::eWaiting;
-	auto present = s.present(sync.presentReady, sync.drawing);
+	auto present = m_swapchain.get().present(sync.presentReady, sync.drawing);
 	if (!present) {
 		return false;
 	}
@@ -200,14 +194,10 @@ bool RenderContext::endFrame() {
 	return true;
 }
 
-bool RenderContext::reconstructd(glm::ivec2 framebufferSize) {
-	if (!Swapchain::valid(framebufferSize)) {
-		return false;
-	}
-	Swapchain& swapchain = m_swapchain;
-	auto const flags = swapchain.flags();
-	if (flags.any(Swapchain::Flag::eOutOfDate | Swapchain::Flag::eSuboptimal | Swapchain::Flag::ePaused)) {
-		if (swapchain.reconstruct(framebufferSize)) {
+bool RenderContext::reconstructed(glm::ivec2 framebufferSize) {
+	auto const flags = m_swapchain.get().flags();
+	if (flags.any(Swapchain::Flag::eOutOfDate /*| Swapchain::Flag::eRotated*/ | Swapchain::Flag::ePaused)) {
+		if (m_swapchain.get().reconstruct(framebufferSize)) {
 			m_storage.status = Status::eWaiting;
 			return true;
 		}
@@ -216,8 +206,7 @@ bool RenderContext::reconstructd(glm::ivec2 framebufferSize) {
 }
 
 View<Pipeline> RenderContext::makePipeline(std::string_view id, Pipeline::CreateInfo createInfo) {
-	Swapchain& s = m_swapchain;
-	createInfo.dynamicState.renderPass = s.renderPass();
+	createInfo.dynamicState.renderPass = m_swapchain.get().renderPass();
 	Pipeline p0(m_vram, std::move(createInfo), id);
 	auto [iter, bResult] = m_storage.pipes.emplace(id, std::move(p0));
 	if (!bResult || iter == m_storage.pipes.end()) {
@@ -247,16 +236,30 @@ View<Pipeline> RenderContext::pipeline(Hash id) {
 }
 
 vk::Sampler RenderContext::makeSampler(vk::SamplerCreateInfo const& info) {
-	Device& d = m_device;
-	vk::Sampler ret = d.m_device.createSampler(info);
+	vk::Sampler ret = m_device.get().m_device.createSampler(info);
 	m_storage.samplers.push_back(ret);
 	return ret;
 }
 
+glm::mat4 RenderContext::preRotate() const noexcept {
+	glm::mat4 ret(1.0f);
+	f32 rad = 0.0f;
+	auto const transform = m_swapchain.get().m_storage.current.transform;
+	if (transform == vk::SurfaceTransformFlagBitsKHR::eIdentity) {
+		return ret;
+	} else if (transform == vk::SurfaceTransformFlagBitsKHR::eRotate90) {
+		rad = glm::radians(90.0f);
+	} else if (transform == vk::SurfaceTransformFlagBitsKHR::eRotate180) {
+		rad = glm::radians(180.0f);
+	} else if (transform == vk::SurfaceTransformFlagBitsKHR::eRotate180) {
+		rad = glm::radians(270.0f);
+	}
+	return glm::rotate(ret, rad, g_nFront);
+}
+
 vk::Viewport RenderContext::viewport(vk::Extent2D extent, glm::vec2 const& depth, ScreenRect const& nRect) const noexcept {
 	if (extent.width == 0 || extent.height == 0) {
-		Swapchain& s = m_swapchain;
-		extent = s.m_storage.extent;
+		extent = m_swapchain.get().m_storage.current.extent;
 	}
 	vk::Viewport ret;
 	glm::vec2 const size = nRect.size();
@@ -271,8 +274,7 @@ vk::Viewport RenderContext::viewport(vk::Extent2D extent, glm::vec2 const& depth
 
 vk::Rect2D RenderContext::scissor(vk::Extent2D extent, ScreenRect const& nRect) const noexcept {
 	if (extent.width == 0 || extent.height == 0) {
-		Swapchain& s = m_swapchain;
-		extent = s.m_storage.extent;
+		extent = m_swapchain.get().m_storage.current.extent;
 	}
 	vk::Rect2D scissor;
 	glm::vec2 const size = nRect.size();

@@ -28,17 +28,18 @@ std::vector<u32> Queues::familyIndices(QFlags flags) const {
 }
 
 vk::Result Queues::present(vk::PresentInfoKHR const& info) {
+	auto lock = m_mutex.lock();
 	return queue(QType::ePresent).queue.presentKHR(info);
 }
 
-void Queues::waitIdle(QType type) const {
+void Queues::waitIdle(QType type) {
+	auto lock = m_mutex.lock();
 	queue(type).queue.waitIdle();
 }
 
 void Queues::submit(QType type, vAP<vk::SubmitInfo> infos, vk::Fence signal) {
 	auto lock = m_mutex.lock();
-	vk::Queue queue = m_queues[(std::size_t)type].queue;
-	queue.submit(infos, signal);
+	queue(type).queue.submit(infos, signal);
 }
 
 } // namespace le::graphics

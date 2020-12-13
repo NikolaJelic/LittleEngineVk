@@ -28,11 +28,10 @@ View<Buffer> createStagingBuffer(Memory& memory, vk::DeviceSize size) {
 } // namespace
 
 Transfer::Transfer(Memory& memory, CreateInfo const& info) : m_memory(memory) {
-	Device& d = memory.m_device;
 	vk::CommandPoolCreateInfo poolInfo;
 	poolInfo.flags = vk::CommandPoolCreateFlagBits::eResetCommandBuffer;
-	poolInfo.queueFamilyIndex = d.m_queues.familyIndex(QType::eTransfer);
-	m_data.pool = d.m_device.createCommandPool(poolInfo);
+	poolInfo.queueFamilyIndex = memory.m_device.get().m_queues.familyIndex(QType::eTransfer);
+	m_data.pool = memory.m_device.get().m_device.createCommandPool(poolInfo);
 	m_queue.active(true);
 	m_sync.stagingThread = threads::newThread([this, r = info.reserve]() {
 		{
@@ -86,10 +85,8 @@ Transfer::~Transfer() {
 }
 
 std::size_t Transfer::update() {
-	Memory& r = m_memory;
-	Device& d = r.m_device;
-	auto removeDone = [&d, this](Batch& batch) -> bool {
-		if (d.signalled(batch.done)) {
+	auto removeDone = [this](Batch& batch) -> bool {
+		if (m_memory.get().m_device.get().signalled(batch.done)) {
 			if (batch.framePad == 0) {
 				for (auto& [stage, promise] : batch.entries) {
 					promise->set_value();
@@ -113,7 +110,7 @@ std::size_t Transfer::update() {
 		vk::SubmitInfo submitInfo;
 		submitInfo.commandBufferCount = (u32)commands.size();
 		submitInfo.pCommandBuffers = commands.data();
-		d.m_queues.submit(QType::eTransfer, submitInfo, m_batches.active.done);
+		m_memory.get().m_device.get().m_queues.submit(QType::eTransfer, submitInfo, m_batches.active.done);
 		m_batches.submitted.push_back(std::move(m_batches.active));
 	}
 	m_batches.active = {};
@@ -154,16 +151,14 @@ vk::CommandBuffer Transfer::nextCommand() {
 	vk::CommandBufferAllocateInfo commandBufferInfo;
 	commandBufferInfo.commandBufferCount = 1;
 	commandBufferInfo.commandPool = m_data.pool;
-	Device& d = static_cast<Memory&>(m_memory).m_device;
-	return d.m_device.allocateCommandBuffers(commandBufferInfo).front();
+	return m_memory.get().m_device.get().m_device.allocateCommandBuffers(commandBufferInfo).front();
 }
 
 void Transfer::scavenge(Stage const& stage, vk::Fence fence) {
 	m_data.commands.push_back(stage.command);
 	m_data.buffers.push_back(stage.buffer);
 	if (std::find(m_data.fences.begin(), m_data.fences.end(), fence) == m_data.fences.end()) {
-		Device& d = static_cast<Memory&>(m_memory).m_device;
-		d.resetFence(fence);
+		m_memory.get().m_device.get().resetFence(fence);
 		m_data.fences.push_back(fence);
 	}
 }
@@ -174,7 +169,6 @@ vk::Fence Transfer::nextFence() {
 		m_data.fences.pop_back();
 		return ret;
 	}
-	Device& d = static_cast<Memory&>(m_memory).m_device;
-	return d.createFence(false);
+	return m_memory.get().m_device.get().createFence(false);
 }
 } // namespace le::graphics

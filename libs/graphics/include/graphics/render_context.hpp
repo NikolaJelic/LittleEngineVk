@@ -69,7 +69,8 @@ class RenderContext : NoCopy {
 
 	Status status() const noexcept;
 	std::size_t index() const noexcept;
-	bool reconstructd(glm::ivec2 framebufferSize);
+	glm::ivec2 extent() const noexcept;
+	bool reconstructed(glm::ivec2 framebufferSize);
 
 	View<Pipeline> makePipeline(std::string_view id, Pipeline::CreateInfo createInfo);
 	View<Pipeline> pipeline(Hash id);
@@ -77,7 +78,10 @@ class RenderContext : NoCopy {
 	bool hasPipeline(Hash id) const noexcept;
 
 	vk::Sampler makeSampler(vk::SamplerCreateInfo const& info);
+	vk::Format colourFormat() const noexcept;
 
+	f32 aspectRatio() const noexcept;
+	glm::mat4 preRotate() const noexcept;
 	vk::Viewport viewport(vk::Extent2D extent = {0, 0}, glm::vec2 const& depth = {0.0f, 1.0f}, ScreenRect const& nRect = {}) const noexcept;
 	vk::Rect2D scissor(vk::Extent2D extent = {0, 0}, ScreenRect const& nRect = {}) const noexcept;
 
@@ -136,10 +140,22 @@ Pipeline::CreateInfo RenderContext::pipeInfo(Shader const& shader, PFlags flags)
 	return ret;
 }
 
+inline f32 RenderContext::aspectRatio() const noexcept {
+	vk::Extent2D const extent = m_swapchain.get().m_storage.current.extent;
+	bool const bRotated = m_swapchain.get().m_storage.flags.test(Swapchain::Flag::eRotated);
+	return bRotated ? f32(extent.height) / std::max(f32(extent.width), 1.0f) : f32(extent.width) / std::max(f32(extent.height), 1.0f);
+}
+
 inline std::size_t RenderContext::index() const noexcept {
 	return m_sync.index;
 }
 inline RenderContext::Status RenderContext::status() const noexcept {
 	return m_storage.status;
+}
+inline glm::ivec2 RenderContext::extent() const noexcept {
+	return {m_swapchain.get().m_storage.current.extent.width, m_swapchain.get().m_storage.current.extent.height};
+}
+inline vk::Format RenderContext::colourFormat() const noexcept {
+	return m_swapchain.get().m_metadata.formats.colour;
 }
 } // namespace le::graphics

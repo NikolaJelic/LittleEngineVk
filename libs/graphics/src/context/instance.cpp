@@ -91,7 +91,8 @@ Instance::Instance(CreateInfo const& info) {
 	m_metadata.layers.clear();
 	std::unordered_set<std::string_view> requiredExtensionsSet = {info.extensions.begin(), info.extensions.end()};
 	bool bValidation = false;
-	if (info.bValidation) {
+	// TODO: Fix Pixel drawing nothing on Android
+	if (info.bValidation && levk_OS != os::OS::eAndroid) {
 		if (!findLayer(layerProps, szValidationLayer, dl::level::warning)) {
 			ENSURE(false, "Validation layers requested but not present!");
 		} else {
@@ -118,13 +119,15 @@ Instance::Instance(CreateInfo const& info) {
 	m_instance = vk::createInstance(createInfo, nullptr);
 	VK_DISPATCHER.init(m_instance);
 	m_loader = VK_DISPATCHER;
-	if (bValidation) {
+	// TODO: Fix Debug Utils Messenger crash on Android
+	if (bValidation && levk_OS != os::OS::eAndroid) {
 		vk::DebugUtilsMessengerCreateInfoEXT createInfo;
 		using vksev = vk::DebugUtilsMessageSeverityFlagBitsEXT;
 		createInfo.messageSeverity = vksev::eError | vksev::eWarning | vksev::eInfo | vksev::eVerbose;
 		using vktype = vk::DebugUtilsMessageTypeFlagBitsEXT;
 		createInfo.messageType = vktype::eGeneral | vktype::ePerformance | vktype::eValidation;
 		createInfo.pfnUserCallback = &validationCallback;
+		ENSURE(m_loader.vkCreateDebugUtilsMessengerEXT, "Function pointer is null");
 		m_messenger = m_instance.createDebugUtilsMessengerEXT(createInfo, nullptr, m_loader);
 	}
 	logD("[{}] Vulkan instance constructed", g_name);

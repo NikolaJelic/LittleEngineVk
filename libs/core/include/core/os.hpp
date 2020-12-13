@@ -10,7 +10,7 @@
 
 namespace le::os {
 enum class OS : s8 { eWindows, eLinux, eAndroid, eUnknown };
-enum class Arch : s8 { eX64, eARM64, eUnknown };
+enum class Arch : s8 { eX64, eARM64, eX86, eUnknown };
 enum class StdLib : s8 { eMSVC, eLibStdCXX, eUnknown };
 enum class Compiler : s8 { eClang, eGCC, eVCXX, eUnknown };
 } // namespace le::os

@@ -91,7 +91,6 @@ bool Pipeline::construct(bool bFixed) {
 	if (!c.dynamicState.shader || !valid(c.dynamicState.shader->m_modules) || default_v(c.dynamicState.renderPass)) {
 		return false;
 	}
-	Device& d = m_device;
 	if (bFixed) {
 		auto& f = m_storage.fixed;
 		f = {};
@@ -104,11 +103,11 @@ bool Pipeline::construct(bool bFixed) {
 			}
 			createInfo.bindingCount = (u32)bindings.size();
 			createInfo.pBindings = bindings.data();
-			auto const descLayout = d.m_device.createDescriptorSetLayout(createInfo);
+			auto const descLayout = m_device.get().m_device.createDescriptorSetLayout(createInfo);
 			f.setLayouts.push_back(descLayout);
 			f.bindingInfos.push_back(std::move(binds));
 		}
-		f.layout = d.createPipelineLayout(setBindings.push, f.setLayouts);
+		f.layout = m_device.get().createPipelineLayout(setBindings.push, f.setLayouts);
 	}
 	vk::PipelineVertexInputStateCreateInfo vertexInputState;
 	{
@@ -187,14 +186,7 @@ bool Pipeline::construct(bool bFixed) {
 	createInfo.renderPass = c.dynamicState.renderPass;
 	createInfo.subpass = c.subpass;
 
-#if VK_HEADER_VERSION >= 131
-	auto pipeline = d.m_device.createGraphicsPipeline({}, createInfo);
-#else
-	auto [result, pipeline] = d.m_device.createGraphicsPipeline({}, createInfo);
-	if (result != vk::Result::eSuccess) {
-		return false;
-	}
-#endif
+	auto pipeline = m_device.get().m_device.createGraphicsPipeline({}, createInfo);
 	m_storage.dynamic.pipeline = pipeline;
 	return true;
 }

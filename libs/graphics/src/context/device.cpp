@@ -173,14 +173,13 @@ Device::Device(Instance& instance, vk::SurfaceKHR surface, CreateInfo const& inf
 	m_device = m_physicalDevice.createDevice(deviceCreateInfo);
 	m_queues.setup(m_device, queueData);
 	instance.m_loader.init(m_device);
-	logD("[{}] Vulkan device constructed", g_name);
+	logD("[{}] Vulkan device constructed, using GPU {}", g_name, m_metadata.picked.name());
 	g_validationLevel = validationLevel;
 }
 
 std::vector<AvailableDevice> Device::availableDevices() const {
 	std::vector<AvailableDevice> ret;
-	Instance& inst = m_instance;
-	auto physicalDevices = inst.m_instance.enumeratePhysicalDevices();
+	auto physicalDevices = m_instance.get().m_instance.enumeratePhysicalDevices();
 	ret.reserve(physicalDevices.size());
 	for (auto const& physDev : physicalDevices) {
 		std::unordered_set<std::string_view> missingExtensions(requiredExtensions.begin(), requiredExtensions.end());

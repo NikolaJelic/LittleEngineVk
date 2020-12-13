@@ -8,16 +8,19 @@
 namespace le::graphics {
 class VRAM;
 class Device;
-struct PresentHandle;
 
 class Swapchain {
   public:
-	enum class Flag : s8 { ePaused, eOutOfDate, eSuboptimal, eCOUNT_ };
+	enum class Flag : s8 { ePaused, eOutOfDate, eSuboptimal, eRotated, eCOUNT_ };
 	using Flags = kt::enum_flags<Flag>;
 
 	struct Frame {
 		RenderTarget target;
 		vk::Fence drawn;
+	};
+	struct Display {
+		vk::Extent2D extent = {};
+		vk::SurfaceTransformFlagBitsKHR transform = {};
 	};
 	struct Storage {
 		Image depthImage;
@@ -25,7 +28,7 @@ class Swapchain {
 		vk::SwapchainKHR swapchain;
 		std::vector<Frame> frames;
 
-		vk::Extent2D extent;
+		Display current;
 		u32 imageIndex = 0;
 		u8 imageCount = 0;
 		Flags flags;
@@ -50,13 +53,17 @@ class Swapchain {
 		CreateInfo info;
 		vk::RenderPass renderPass;
 		vk::SurfaceKHR surface;
+		vk::SwapchainKHR retired;
 		vk::PresentModeKHR presentMode;
+		std::optional<Display> original;
 		std::vector<vk::PresentModeKHR> availableModes;
 		struct {
 			vk::Format colour;
 			vk::Format depth;
 		} formats;
 	};
+
+	static constexpr std::string_view presentModeName(vk::PresentModeKHR mode) noexcept;
 	static constexpr bool valid(glm::ivec2 framebufferSize) noexcept;
 
 	Swapchain(VRAM& vram);
@@ -82,12 +89,28 @@ class Swapchain {
   private:
 	bool construct(glm::ivec2 framebufferSize);
 	void makeRenderPass();
-	void destroy(bool bMeta);
+	void destroy(Storage& out_storage, bool bMeta);
+	void orientCheck();
 };
 
 // impl
 
-constexpr bool Swapchain::valid(glm::ivec2 framebufferSize) noexcept {
+inline constexpr std::string_view Swapchain::presentModeName(vk::PresentModeKHR mode) noexcept {
+	switch (mode) {
+	case vk::PresentModeKHR::eFifo:
+		return "FIFO";
+	case vk::PresentModeKHR::eFifoRelaxed:
+		return "FIFO Relaxed";
+	case vk::PresentModeKHR::eImmediate:
+		return "Immediate";
+	case vk::PresentModeKHR::eMailbox:
+		return "Mailbox";
+	default:
+		return "Other";
+	}
+}
+
+inline constexpr bool Swapchain::valid(glm::ivec2 framebufferSize) noexcept {
 	return framebufferSize.x > 0 && framebufferSize.y > 0;
 }
 } // namespace le::graphics

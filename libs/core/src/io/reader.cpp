@@ -10,13 +10,14 @@
 
 #if defined(LEVK_OS_ANDROID)
 #include <android_native_app_glue.h>
+
+namespace le {
+extern android_app* g_androidApp;
+}
 #endif
 
 namespace le::io {
-
 #if defined(LEVK_OS_ANDROID)
-extern android_app* g_androidApp;
-
 struct AndroidAsset {
 	AAsset* pAsset = nullptr;
 
@@ -249,9 +250,16 @@ ZIPReader::ZIPReader() {
 bool ZIPReader::mount(io::Path path) {
 	impl::initPhysfs();
 	auto pathStr = path.generic_string();
+	FileReader file;
 	if (std::find(m_zips.begin(), m_zips.end(), path) == m_zips.end()) {
-		if (!io::is_regular_file(path)) {
+		auto const bytes = file.bytes(path);
+		if (!bytes) {
 			logE("[{}] [{}] not found on Filesystem!", utils::tName<ZIPReader>(), pathStr);
+			return false;
+		}
+		int const result = PHYSFS_mountMemory(bytes->data(), bytes->size(), nullptr, path.string().data(), nullptr, 0);
+		if (result == 0) {
+			logE("[{}] [{}] failed to decompress archive!", utils::tName<ZIPReader>(), pathStr);
 			return false;
 		}
 		PHYSFS_mount(path.string().data(), nullptr, 0);

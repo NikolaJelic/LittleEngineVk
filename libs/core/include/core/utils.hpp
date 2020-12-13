@@ -10,6 +10,7 @@
 #include <typeinfo>
 #include <vector>
 #include <core/ensure.hpp>
+#include <core/ref.hpp>
 #include <core/std_types.hpp>
 #include <kt/async_queue/async_queue.hpp>
 
@@ -162,3 +163,12 @@ bool utils::ready(std::future<T> const& future) noexcept {
 	return future.valid() && future.wait_for(0ms) == std::future_status::ready;
 }
 } // namespace le
+
+namespace std {
+template <typename T>
+struct hash<le::Ref<T>> {
+	size_t operator()(le::Ref<T> const& lhs) const {
+		return std::hash<T const*>()(&lhs.get());
+	}
+};
+} // namespace std

@@ -44,13 +44,12 @@ bool Shader::reconstruct(SpirVMap spirV) {
 		std::memcpy(m_spirV[idx].data(), spirV[idx].data(), spirV[idx].size());
 	}
 	std::size_t idx = 0;
-	Device& d = m_device;
 	for (auto const& code : m_spirV) {
 		if (!code.empty()) {
 			vk::ShaderModuleCreateInfo createInfo;
 			createInfo.codeSize = code.size() * sizeof(decltype(code[0]));
 			createInfo.pCode = code.data();
-			m_modules[idx++] = d.m_device.createShaderModule(createInfo);
+			m_modules[idx++] = m_device.get().m_device.createShaderModule(createInfo);
 		}
 	}
 	return valid();
@@ -75,10 +74,9 @@ bool Shader::empty() const noexcept {
 }
 
 void Shader::destroy() {
-	Device& d = m_device;
 	for (auto module : m_modules) {
 		if (!default_v(module)) {
-			d.m_device.destroyShaderModule(module);
+			m_device.get().m_device.destroyShaderModule(module);
 		}
 	}
 }

@@ -50,9 +50,11 @@ static void poll(Flags& out_flags, window::EventQueue queue) {
 	}
 }
 
+graphics::Bootstrap* g_boot;
+graphics::RenderContext* g_context;
+
 int main(int argc, char** argv) {
 	try {
-		tasks::Service ts(4);
 		io::FileReader reader;
 		io::Path const prefix = os::dirPath(os::Dir::eWorking) / "data";
 		reader.mount(prefix);
@@ -84,9 +86,10 @@ int main(int argc, char** argv) {
 		};
 		graphics::Bootstrap::CreateInfo bootInfo;
 		bootInfo.instance.extensions = winst.vkInstanceExtensions();
-		bootInfo.instance.bValidation = true;
+		bootInfo.instance.bValidation = levk_debug;
 		bootInfo.instance.validationLog = dl::level::info;
 		bootInfo.device.bPrintAvailable = true;
+		// bootInfo.device.bDedicatedTransfer = false;
 		graphics::Bootstrap boot(bootInfo, makeSurface, winst.framebufferSize());
 		boot.vram.m_bLogAllocs = true;
 		graphics::RenderContext context(boot.swapchain);
@@ -98,12 +101,8 @@ int main(int argc, char** argv) {
 			}
 
 			graphics::Geometry gcube = graphics::makeCube(0.5f);
-			graphics::Geometry gcone = graphics::makeCone();
 			auto const skyCubeI = gcube.indices;
 			auto const skyCubeV = gcube.positions();
-			for (auto& v : gcone.vertices) {
-				v.colour = colours::yellow.toVec4();
-			}
 			struct VP {
 				glm::mat4 mat_p;
 				glm::mat4 mat_v;
@@ -128,7 +127,7 @@ int main(int argc, char** argv) {
 			texInfo.data = std::move(cm);
 			sky.construct(texInfo);
 			mesh0.construct(gcube);
-			mesh1.construct(gcone);
+			mesh1.construct(graphics::makeCone());
 			skyCube.construct(Span(skyCubeV), skyCubeI);
 			if (!testV || !testF || !testFTex || !skyV || !skyF) {
 				logE("shaders missing");
@@ -215,7 +214,7 @@ int main(int argc, char** argv) {
 					}*/
 					flags.reset(Flag::eResized);
 				}
-				if (context.reconstructd(winst.framebufferSize())) {
+				if (context.reconstructed(winst.framebufferSize())) {
 					continue;
 				}
 

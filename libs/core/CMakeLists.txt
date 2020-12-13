@@ -2,8 +2,9 @@ project(levk-core)
 
 # Android
 if(PLATFORM STREQUAL Android)
-	add_library(app-glue STATIC "${ANDROID_NDK}/sources/android/native_app_glue/android_native_app_glue.c")
-	target_include_directories(app-glue SYSTEM PUBLIC "${ANDROID_NDK}/sources/android/native_app_glue")
+	add_library(android-app-glue STATIC "${ANDROID_NDK}/sources/android/native_app_glue/android_native_app_glue.c")
+	target_include_directories(android-app-glue SYSTEM PUBLIC "${ANDROID_NDK}/sources/android/native_app_glue")
+	target_link_libraries(android-app-glue PUBLIC log android)
 endif()
 
 # Library
@@ -23,13 +24,11 @@ target_link_libraries(${PROJECT_NAME}
 	PUBLIC
 		glm
 		dlog
+		$<$<STREQUAL:${PLATFORM},Android>:android-app-glue>
 	PRIVATE
 		levk-interface
 		physfs-static
 		$<$<STREQUAL:${PLATFORM},Linux>:X11>
-		$<$<STREQUAL:${PLATFORM},Android>:log>
-		$<$<STREQUAL:${PLATFORM},Android>:android>
-		$<$<STREQUAL:${PLATFORM},Android>:app-glue>
 )
 
 # PCH

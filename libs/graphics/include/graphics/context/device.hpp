@@ -109,12 +109,11 @@ void Device::destroy(T& out_t, Ts&... out_ts) {
 	if constexpr (std::is_same_v<T, vk::Instance> || std::is_same_v<T, vk::Device>) {
 		out_t.destroy();
 	} else {
-		Instance& inst = m_instance;
-		if (!default_v(m_device) && !default_v(inst.m_instance) && !default_v(out_t)) {
+		if (!default_v(m_device) && !default_v(m_instance.get().m_instance) && !default_v(out_t)) {
 			if constexpr (std::is_same_v<T, vk::SurfaceKHR>) {
-				inst.m_instance.destroySurfaceKHR(out_t);
+				m_instance.get().m_instance.destroySurfaceKHR(out_t);
 			} else if constexpr (std::is_same_v<T, vk::DebugUtilsMessengerEXT>) {
-				inst.m_instance.destroy(out_t, nullptr);
+				m_instance.get().m_instance.destroy(out_t, nullptr);
 			} else if constexpr (std::is_same_v<T, vk::DescriptorSetLayout>) {
 				m_device.destroyDescriptorSetLayout(out_t);
 			} else if constexpr (std::is_same_v<T, vk::DescriptorPool>) {
