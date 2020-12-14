@@ -4,15 +4,10 @@
 #include <unordered_set>
 #include <core/maths.hpp>
 #include <graphics/context/device.hpp>
+#include <graphics/utils/utils.hpp>
 
 namespace le::graphics {
 namespace {
-struct QueueFamily final {
-	u32 index = 0;
-	u32 queueCount = 0;
-	QFlags flags;
-};
-
 void listDevices(Span<AvailableDevice> devices) {
 	std::stringstream str;
 	str << "\nAvailable GPUs:";
@@ -78,78 +73,25 @@ Device::Device(Instance& instance, vk::SurfaceKHR surface, CreateInfo const& inf
 	m_metadata.limits = m_metadata.picked.properties.limits;
 	m_metadata.lineWidth.first = m_metadata.picked.properties.limits.lineWidthRange[0U];
 	m_metadata.lineWidth.second = m_metadata.picked.properties.limits.lineWidthRange[1U];
-	// TODO
-	// rd::ImageSamplers::clampDiffSpecCount(instance.deviceLimits.maxPerStageDescriptorSamplers);
-	// TODO
-	// Simplify queue selection
-	auto const queueFamilyProperties = m_metadata.picked.queueFamilies;
-	std::vector<vk::DeviceQueueCreateInfo> queueCreateInfos;
-	std::unordered_map<u32, QueueFamily> queueFamilies;
-	QFlags found;
-	std::size_t graphicsFamilyIdx = 0;
-	for (std::size_t idx = 0; idx < queueFamilyProperties.size() && !found.bits.all(); ++idx) {
-		auto const& queueFamily = queueFamilyProperties[idx];
-		if (queueFamily.queueFlags & vk::QueueFlagBits::eGraphics) {
-			if (!found.test(QType::eGraphics)) {
-				QueueFamily& family = queueFamilies[(u32)idx];
-				family.index = (u32)idx;
-				family.queueCount = queueFamily.queueCount;
-				family.flags |= QType::eGraphics;
-				found.set(QType::eGraphics);
-				graphicsFamilyIdx = idx;
+	auto families = utils::queueFamilies(m_metadata.picked, m_metadata.surface);
+	if (info.qselect == QSelect::eSingleFamily || info.qselect == QSelect::eSingleQueue) {
+		std::optional<QueueFamily> uber;
+		for (auto const& family : families) {
+			if (family.flags.all(QFlags::inverse())) {
+				uber = family;
+				logI("[{}] Forcing single Vulkan queue family [{}]", g_name, family.familyIndex);
+				break;
 			}
 		}
-		if (m_physicalDevice.getSurfaceSupportKHR((u32)idx, m_metadata.surface, instance.m_loader)) {
-			if (!found.test(QType::ePresent)) {
-				QueueFamily& family = queueFamilies[(u32)idx];
-				family.index = (u32)idx;
-				family.queueCount = queueFamily.queueCount;
-				family.flags |= QType::ePresent;
-				found.set(QType::ePresent);
+		if (uber) {
+			if (info.qselect == QSelect::eSingleQueue) {
+				logI("[{}] Forcing single Vulkan queue (family supports [{}])", g_name, uber->total);
+				uber->total = 1;
 			}
-		}
-		if (info.bDedicatedTransfer && queueFamily.queueFlags & vk::QueueFlagBits::eTransfer) {
-			if (found.test(QType::eGraphics) && idx != graphicsFamilyIdx && !found.test(QType::eTransfer)) {
-				QueueFamily& family = queueFamilies[(u32)idx];
-				family.index = (u32)idx;
-				family.queueCount = queueFamily.queueCount;
-				family.flags |= QType::eTransfer;
-				found.set(QType::eTransfer);
-			}
+			families = {*uber};
 		}
 	}
-	if (!found.test(QType::eGraphics) || !found.test(QType::ePresent)) {
-		throw std::runtime_error("Failed to obtain graphics/present queues from device!");
-	}
-	EnumArray<QType, Queues::Indices> queueData;
-	f32 priority = 1.0f;
-	f32 const priorities[] = {0.7f, 0.3f};
-	for (auto& [index, queueFamily] : queueFamilies) {
-		vk::DeviceQueueCreateInfo queueCreateInfo;
-		queueCreateInfo.queueFamilyIndex = index;
-		queueCreateInfo.queueCount = 1;
-		queueCreateInfo.pQueuePriorities = &priority;
-		if (queueFamily.flags.test(QType::eGraphics)) {
-			queueData[(std::size_t)QType::eGraphics].familyIndex = index;
-		}
-		if (queueFamily.flags.test(QType::ePresent)) {
-			queueData[(std::size_t)QType::ePresent].familyIndex = index;
-		}
-		if (queueFamily.flags.test(QType::eTransfer)) {
-			queueData[(std::size_t)QType::eTransfer].familyIndex = index;
-		}
-		if (info.bDedicatedTransfer && !found.test(QType::eTransfer) && queueFamily.flags.test(QType::eGraphics) && queueFamily.queueCount > 1) {
-			queueCreateInfo.queueCount = 2;
-			queueCreateInfo.pQueuePriorities = priorities;
-			queueData[(std::size_t)QType::eTransfer].familyIndex = 1;
-			found.set(QType::eTransfer);
-		}
-		queueCreateInfos.push_back(std::move(queueCreateInfo));
-	}
-	if (!found.test(QType::eTransfer)) {
-		queueData[(std::size_t)QType::eTransfer] = queueData[(std::size_t)QType::eGraphics];
-	}
-	// TODO: check before enabling
+	auto queueCreateInfos = m_queues.select(families);
 	vk::PhysicalDeviceFeatures deviceFeatures;
 	deviceFeatures.fillModeNonSolid = m_metadata.picked.features2.features.fillModeNonSolid;
 	deviceFeatures.wideLines = m_metadata.picked.features2.features.wideLines;
@@ -171,7 +113,7 @@ Device::Device(Instance& instance, vk::SurfaceKHR surface, CreateInfo const& inf
 	deviceCreateInfo.enabledExtensionCount = (u32)requiredExtensions.size();
 	deviceCreateInfo.ppEnabledExtensionNames = requiredExtensions.data();
 	m_device = m_physicalDevice.createDevice(deviceCreateInfo);
-	m_queues.setup(m_device, queueData);
+	m_queues.setup(m_device);
 	instance.m_loader.init(m_device);
 	logD("[{}] Vulkan device constructed, using GPU {}", g_name, m_metadata.picked.name());
 	g_validationLevel = validationLevel;

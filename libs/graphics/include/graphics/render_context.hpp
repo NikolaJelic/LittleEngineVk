@@ -69,7 +69,7 @@ class RenderContext : NoCopy {
 
 	Status status() const noexcept;
 	std::size_t index() const noexcept;
-	glm::ivec2 extent() const noexcept;
+	glm::ivec2 extent(bool bWithRotation) const noexcept;
 	bool reconstructed(glm::ivec2 framebufferSize);
 
 	View<Pipeline> makePipeline(std::string_view id, Pipeline::CreateInfo createInfo);
@@ -82,8 +82,8 @@ class RenderContext : NoCopy {
 
 	f32 aspectRatio() const noexcept;
 	glm::mat4 preRotate() const noexcept;
-	vk::Viewport viewport(vk::Extent2D extent = {0, 0}, glm::vec2 const& depth = {0.0f, 1.0f}, ScreenRect const& nRect = {}) const noexcept;
-	vk::Rect2D scissor(vk::Extent2D extent = {0, 0}, ScreenRect const& nRect = {}) const noexcept;
+	vk::Viewport viewport(glm::ivec2 extent = {0, 0}, glm::vec2 const& depth = {0.0f, 1.0f}, ScreenRect const& nRect = {}) const noexcept;
+	vk::Rect2D scissor(glm::ivec2 extent = {0, 0}, ScreenRect const& nRect = {}) const noexcept;
 
   private:
 	void destroy();
@@ -141,9 +141,8 @@ Pipeline::CreateInfo RenderContext::pipeInfo(Shader const& shader, PFlags flags)
 }
 
 inline f32 RenderContext::aspectRatio() const noexcept {
-	vk::Extent2D const extent = m_swapchain.get().m_storage.current.extent;
-	bool const bRotated = m_swapchain.get().m_storage.flags.test(Swapchain::Flag::eRotated);
-	return bRotated ? f32(extent.height) / std::max(f32(extent.width), 1.0f) : f32(extent.width) / std::max(f32(extent.height), 1.0f);
+	glm::ivec2 const ext = extent(true);
+	return f32(ext.x) / std::max(f32(ext.y), 1.0f);
 }
 
 inline std::size_t RenderContext::index() const noexcept {
@@ -152,8 +151,10 @@ inline std::size_t RenderContext::index() const noexcept {
 inline RenderContext::Status RenderContext::status() const noexcept {
 	return m_storage.status;
 }
-inline glm::ivec2 RenderContext::extent() const noexcept {
-	return {m_swapchain.get().m_storage.current.extent.width, m_swapchain.get().m_storage.current.extent.height};
+inline glm::ivec2 RenderContext::extent(bool bWithRotation) const noexcept {
+	vk::Extent2D const ext = m_swapchain.get().m_storage.current.extent;
+	bool const bRotated = bWithRotation && m_swapchain.get().m_storage.flags.test(Swapchain::Flag::eRotated);
+	return bRotated ? glm::ivec2(ext.height, ext.width) : glm::ivec2(ext.width, ext.height);
 }
 inline vk::Format RenderContext::colourFormat() const noexcept {
 	return m_swapchain.get().m_metadata.formats.colour;

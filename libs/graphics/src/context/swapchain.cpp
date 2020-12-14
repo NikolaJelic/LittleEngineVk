@@ -177,7 +177,7 @@ bool Swapchain::present(vk::Semaphore drawWait, vk::Fence onDrawn) {
 	presentInfo.pImageIndices = &index;
 	vk::Result result;
 	try {
-		result = m_device.get().m_queues.present(presentInfo);
+		result = m_device.get().m_queues.present(presentInfo, false);
 	} catch (vk::OutOfDateKHRError const& e) {
 		logD("[{}] Swapchain Failed to present image [{}]", g_name, e.what());
 		m_storage.flags.set(Flag::eOutOfDate);
@@ -337,8 +337,8 @@ void Swapchain::makeRenderPass() {
 
 void Swapchain::destroy(Storage& out_storage, bool bMeta) {
 	auto r = bMeta ? std::exchange(m_metadata.renderPass, vk::RenderPass()) : vk::RenderPass();
-	m_device.get().m_queues.waitIdle(QType::eGraphics);
-	auto lock = m_device.get().m_queues.lockMutex();
+	m_device.get().waitIdle();
+	auto lock = m_device.get().m_queues.lock();
 	for (auto& frame : out_storage.frames) {
 		m_device.get().destroy(frame.target.colour.view);
 	}

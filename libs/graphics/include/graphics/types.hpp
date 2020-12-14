@@ -56,6 +56,14 @@ struct AvailableDevice final {
 	std::vector<vk::QueueFamilyProperties> queueFamilies;
 };
 
+struct QueueFamily {
+	u32 familyIndex = 0;
+	u32 total = 0;
+	u32 reserved = 0;
+	u32 nextQueueIndex = 0;
+	QFlags flags;
+};
+
 struct RenderImage final {
 	vk::Image image;
 	vk::ImageView view;

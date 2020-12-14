@@ -4,11 +4,13 @@
 #include <core/traits.hpp>
 #include <graphics/context/defer_queue.hpp>
 #include <graphics/context/instance.hpp>
-#include <graphics/context/queues.hpp>
+#include <graphics/context/queue_multiplex.hpp>
 
 namespace le::graphics {
 class Device final {
   public:
+	enum class QSelect { eOptimal, eSingleFamily, eSingleQueue };
+
 	static constexpr std::array requiredExtensions = {VK_KHR_SWAPCHAIN_EXTENSION_NAME, VK_KHR_MAINTENANCE1_EXTENSION_NAME};
 
 	struct CreateInfo;
@@ -59,7 +61,7 @@ class Device final {
 	vk::Device m_device;
 	vk::PhysicalDevice m_physicalDevice;
 	DeferQueue m_deferred;
-	Queues m_queues;
+	QueueMultiplex m_queues;
 
 	struct {
 		AvailableDevice picked;
@@ -68,14 +70,11 @@ class Device final {
 		vk::PhysicalDeviceLimits limits;
 		std::pair<f32, f32> lineWidth;
 	} m_metadata;
-
-  private:
-	std::vector<std::unique_ptr<Queues>> m_queueStorage;
 };
 
 struct Device::CreateInfo {
 	std::function<AvailableDevice(Span<AvailableDevice>)> pickDevice;
-	bool bDedicatedTransfer = true;
+	QSelect qselect = QSelect::eOptimal;
 	bool bPrintAvailable = false;
 };
 

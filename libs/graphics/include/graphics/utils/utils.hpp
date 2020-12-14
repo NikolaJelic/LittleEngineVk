@@ -36,5 +36,7 @@ bytearray convert(std::initializer_list<u8> bytes);
 bytearray convert(Span<u8> bytes);
 RawImage decompress(bytearray compressed, u8 channels = 4);
 void release(RawImage rawImage);
+
+std::vector<QueueFamily> queueFamilies(AvailableDevice const& device, vk::SurfaceKHR surface);
 } // namespace utils
 } // namespace le::graphics

@@ -89,7 +89,7 @@ int main(int argc, char** argv) {
 		bootInfo.instance.bValidation = levk_debug;
 		bootInfo.instance.validationLog = dl::level::info;
 		bootInfo.device.bPrintAvailable = true;
-		// bootInfo.device.bDedicatedTransfer = false;
+		// bootInfo.device.qselect = graphics::Device::QSelect::eSingleFamily;
 		graphics::Bootstrap boot(bootInfo, makeSurface, winst.framebufferSize());
 		boot.vram.m_bLogAllocs = true;
 		graphics::RenderContext context(boot.swapchain);

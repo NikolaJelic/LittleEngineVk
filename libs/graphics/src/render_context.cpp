@@ -187,7 +187,7 @@ bool RenderContext::endFrame() {
 	submitInfo.signalSemaphoreCount = 1;
 	submitInfo.pSignalSemaphores = &sync.presentReady;
 	m_device.get().m_device.resetFences(sync.drawing);
-	m_device.get().m_queues.submit(QType::eGraphics, submitInfo, sync.drawing);
+	m_device.get().m_queues.submit(QType::eGraphics, submitInfo, sync.drawing, false);
 	m_storage.status = Status::eWaiting;
 	auto present = m_swapchain.get().present(sync.presentReady, sync.drawing);
 	if (!present) {
@@ -260,31 +260,31 @@ glm::mat4 RenderContext::preRotate() const noexcept {
 	return glm::rotate(ret, rad, g_nFront);
 }
 
-vk::Viewport RenderContext::viewport(vk::Extent2D extent, glm::vec2 const& depth, ScreenRect const& nRect) const noexcept {
-	if (extent.width == 0 || extent.height == 0) {
-		extent = m_swapchain.get().m_storage.current.extent;
+vk::Viewport RenderContext::viewport(glm::ivec2 extent, glm::vec2 const& depth, ScreenRect const& nRect) const noexcept {
+	if (!Swapchain::valid(extent)) {
+		extent = this->extent(false);
 	}
 	vk::Viewport ret;
 	glm::vec2 const size = nRect.size();
 	ret.minDepth = depth.x;
 	ret.maxDepth = depth.y;
-	ret.width = size.x * (f32)extent.width;
-	ret.height = -(size.y * (f32)extent.height); // flip viewport about X axis
-	ret.x = nRect.lt.x * (f32)extent.width;
-	ret.y = nRect.lt.y * (f32)extent.height - (f32)ret.height;
+	ret.width = size.x * (f32)extent.x;
+	ret.height = -(size.y * (f32)extent.y); // flip viewport about X axis
+	ret.x = nRect.lt.x * (f32)extent.x;
+	ret.y = nRect.lt.y * (f32)extent.y - ret.height;
 	return ret;
 }
 
-vk::Rect2D RenderContext::scissor(vk::Extent2D extent, ScreenRect const& nRect) const noexcept {
-	if (extent.width == 0 || extent.height == 0) {
-		extent = m_swapchain.get().m_storage.current.extent;
+vk::Rect2D RenderContext::scissor(glm::ivec2 extent, ScreenRect const& nRect) const noexcept {
+	if (!Swapchain::valid(extent)) {
+		extent = this->extent(false);
 	}
 	vk::Rect2D scissor;
 	glm::vec2 const size = nRect.size();
-	scissor.offset.x = (s32)(nRect.lt.x * (f32)extent.width);
-	scissor.offset.y = (s32)(nRect.lt.y * (f32)extent.height);
-	scissor.extent.width = (u32)(size.x * (f32)extent.width);
-	scissor.extent.height = (u32)(size.y * (f32)extent.height);
+	scissor.offset.x = (s32)(nRect.lt.x * (f32)extent.x);
+	scissor.offset.y = (s32)(nRect.lt.y * (f32)extent.y);
+	scissor.extent.width = (u32)(size.x * (f32)extent.x);
+	scissor.extent.height = (u32)(size.y * (f32)extent.y);
 	return scissor;
 }
 

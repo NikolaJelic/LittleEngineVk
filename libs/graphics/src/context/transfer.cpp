@@ -110,7 +110,7 @@ std::size_t Transfer::update() {
 		vk::SubmitInfo submitInfo;
 		submitInfo.commandBufferCount = (u32)commands.size();
 		submitInfo.pCommandBuffers = commands.data();
-		m_memory.get().m_device.get().m_queues.submit(QType::eTransfer, submitInfo, m_batches.active.done);
+		m_memory.get().m_device.get().m_queues.submit(QType::eTransfer, submitInfo, m_batches.active.done, true);
 		m_batches.submitted.push_back(std::move(m_batches.active));
 	}
 	m_batches.active = {};

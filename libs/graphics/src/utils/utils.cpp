@@ -210,4 +210,28 @@ void utils::release(RawImage rawImage) {
 		stbi_image_free((void*)rawImage.bytes.data());
 	}
 }
+
+std::vector<QueueFamily> utils::queueFamilies(AvailableDevice const& device, vk::SurfaceKHR surface) {
+	using vkqf = vk::QueueFlagBits;
+	std::vector<QueueFamily> ret;
+	u32 fidx = 0;
+	for (vk::QueueFamilyProperties const& props : device.queueFamilies) {
+		QueueFamily family;
+		family.familyIndex = fidx;
+		family.total = props.queueCount;
+		bool const bSurfaceSupport = device.physicalDevice.getSurfaceSupportKHR(fidx, surface);
+		if ((props.queueFlags & vkqf::eTransfer) == vkqf::eTransfer) {
+			family.flags.set(QType::eTransfer);
+		}
+		if ((props.queueFlags & vkqf::eGraphics) == vkqf::eGraphics) {
+			family.flags.set(QType::eGraphics | QType::eTransfer);
+		}
+		if (bSurfaceSupport) {
+			family.flags.set(QType::ePresent);
+		}
+		ret.push_back(family);
+		++fidx;
+	}
+	return ret;
+}
 } // namespace le::graphics

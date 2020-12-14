@@ -15,8 +15,6 @@ class Instance final {
 	Instance& operator=(Instance&&);
 	~Instance();
 
-	std::vector<AvailableDevice> availableDevices() const;
-
 	struct {
 		std::vector<char const*> extensions;
 		std::vector<char const*> layers;
