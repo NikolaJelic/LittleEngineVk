@@ -48,17 +48,6 @@ constexpr vk::ShaderStageFlags vf = vk::ShaderStageFlagBits::eVertex | vk::Shade
 constexpr vk::ShaderStageFlags c = vk::ShaderStageFlagBits::eCompute;
 } // namespace stages
 
-struct AvailableDevice final {
-	inline std::string_view name() const noexcept {
-		return std::string_view(properties.deviceName);
-	}
-
-	vk::PhysicalDevice physicalDevice;
-	vk::PhysicalDeviceProperties properties;
-	vk::PhysicalDeviceFeatures2 features2;
-	std::vector<vk::QueueFamilyProperties> queueFamilies;
-};
-
 struct QueueFamily {
 	u32 familyIndex = 0;
 	u32 total = 0;

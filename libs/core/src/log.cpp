@@ -21,6 +21,7 @@ void logAndroid(dl::level level, std::string_view msg, std::string_view tag) {
 		break;
 	}
 	__android_log_print(prio, tag.data(), "%s", msg.data());
+	dl::config::g_on_log(msg, level);
 }
 } // namespace le::detail
 #endif

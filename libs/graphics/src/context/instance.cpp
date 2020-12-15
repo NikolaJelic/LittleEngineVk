@@ -138,6 +138,28 @@ Instance::~Instance() {
 	destroy();
 }
 
+std::vector<PhysicalDevice> Instance::availableDevices(Span<std::string_view> required) const {
+	std::vector<PhysicalDevice> ret;
+	std::vector<vk::PhysicalDevice> const devices = m_instance.enumeratePhysicalDevices();
+	ret.reserve(devices.size());
+	for (auto const& device : devices) {
+		std::unordered_set<std::string_view> missing(required.begin(), required.end());
+		std::vector<vk::ExtensionProperties> const supported = device.enumerateDeviceExtensionProperties();
+		for (std::size_t idx = 0; idx < supported.size() && !missing.empty(); ++idx) {
+			missing.erase(std::string_view(supported[idx].extensionName));
+		}
+		if (missing.empty()) {
+			PhysicalDevice available;
+			available.properties = device.getProperties();
+			available.queueFamilies = device.getQueueFamilyProperties();
+			available.features2 = device.getFeatures2();
+			available.device = device;
+			ret.push_back(std::move(available));
+		}
+	}
+	return ret;
+}
+
 void Instance::destroy() {
 	if (!default_v(m_instance)) {
 		if (!default_v(m_messenger)) {

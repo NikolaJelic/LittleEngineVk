@@ -262,7 +262,7 @@ glm::mat4 RenderContext::preRotate() const noexcept {
 
 vk::Viewport RenderContext::viewport(glm::ivec2 extent, glm::vec2 const& depth, ScreenRect const& nRect) const noexcept {
 	if (!Swapchain::valid(extent)) {
-		extent = this->extent(false);
+		extent = this->extent();
 	}
 	vk::Viewport ret;
 	glm::vec2 const size = nRect.size();
@@ -277,7 +277,7 @@ vk::Viewport RenderContext::viewport(glm::ivec2 extent, glm::vec2 const& depth, 
 
 vk::Rect2D RenderContext::scissor(glm::ivec2 extent, ScreenRect const& nRect) const noexcept {
 	if (!Swapchain::valid(extent)) {
-		extent = this->extent(false);
+		extent = this->extent();
 	}
 	vk::Rect2D scissor;
 	glm::vec2 const size = nRect.size();

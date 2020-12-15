@@ -2,7 +2,7 @@
 #include <memory>
 #include <core/log.hpp>
 #include <core/span.hpp>
-#include <graphics/types.hpp>
+#include <graphics/context/physical_device.hpp>
 
 namespace le::graphics {
 class Instance final {
@@ -14,6 +14,8 @@ class Instance final {
 	Instance(Instance&&);
 	Instance& operator=(Instance&&);
 	~Instance();
+
+	std::vector<PhysicalDevice> availableDevices(Span<std::string_view> requiredExtensions) const;
 
 	struct {
 		std::vector<char const*> extensions;

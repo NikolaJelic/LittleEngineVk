@@ -16,13 +16,6 @@ constexpr T bestFit(U&& all, V&& desired, T fallback) noexcept {
 	return fallback;
 }
 
-[[maybe_unused]] constexpr vk::Extent2D oriented(vk::Extent2D extent, vk::SurfaceTransformFlagBitsKHR transform) noexcept {
-	if (transform & vk::SurfaceTransformFlagBitsKHR::eRotate90 || transform & vk::SurfaceTransformFlagBitsKHR::eRotate270) {
-		return {extent.height, extent.width};
-	}
-	return extent;
-}
-
 struct SwapchainCreateInfo {
 	SwapchainCreateInfo(vk::PhysicalDevice pd, vk::SurfaceKHR surface, Swapchain::CreateInfo const& info) : pd(pd), surface(surface) {
 		vk::SurfaceCapabilitiesKHR capabilities = pd.getSurfaceCapabilitiesKHR(surface);
@@ -96,27 +89,6 @@ struct SwapchainCreateInfo {
 	Swapchain::Display current;
 	u32 imageCount = 0;
 };
-
-void setFlags(Swapchain::Flags& out_flags, vk::Result result) {
-	switch (result) {
-	case vk::Result::eSuboptimalKHR: {
-		if (!out_flags.test(Swapchain::Flag::eSuboptimal)) {
-			g_log.log(lvl::debug, 0, "[{}] Vulkan swapchain is suboptimal", g_name);
-		}
-		out_flags.set(Swapchain::Flag::eSuboptimal);
-		break;
-	}
-	case vk::Result::eErrorOutOfDateKHR: {
-		if (!out_flags.test(Swapchain::Flag::eOutOfDate)) {
-			g_log.log(lvl::debug, 0, "[{}] Vulkan swapchain is out of date", g_name);
-		}
-		out_flags.set(Swapchain::Flag::eOutOfDate);
-		break;
-	}
-	default:
-		break;
-	}
-}
 } // namespace
 
 Swapchain::Frame& Swapchain::Storage::frame() {
@@ -153,20 +125,25 @@ std::optional<RenderTarget> Swapchain::acquireNextImage(vk::Semaphore setDrawRea
 	if (m_storage.flags.any(Flag::ePaused | Flag::eOutOfDate)) {
 		return std::nullopt;
 	}
-	std::optional<vk::ResultValue<u32>> acquire;
+	if (m_storage.acquired) {
+		g_log.log(lvl::warning, 1, "[{}] Attempt to acquire image without presenting previously acquired one", g_name);
+		return m_storage.frame().target;
+	}
 	try {
-		acquire = m_device.get().m_device.acquireNextImageKHR(m_storage.swapchain, maths::max<u64>(), setDrawReady, {});
-		setFlags(m_storage.flags, acquire->result);
+		m_storage.acquired = m_device.get().m_device.acquireNextImageKHR(m_storage.swapchain, maths::max<u64>(), setDrawReady, {});
+		setFlags(m_storage.acquired->result);
 	} catch (vk::OutOfDateKHRError const& e) {
 		m_storage.flags.set(Flag::eOutOfDate);
 		g_log.log(lvl::warning, 1, "[{}] Swapchain failed to acquire next image [{}]", g_name, e.what());
 		return std::nullopt;
 	}
-	if (!acquire || (acquire->result != vk::Result::eSuccess && acquire->result != vk::Result::eSuboptimalKHR)) {
-		g_log.log(lvl::warning, 1, "[{}] Swapchain failed to acquire next image [{}]", g_name, acquire ? g_vkResultStr[acquire->result] : "Unknown Error");
+	if (!m_storage.acquired || (m_storage.acquired->result != vk::Result::eSuccess && m_storage.acquired->result != vk::Result::eSuboptimalKHR)) {
+		g_log.log(lvl::warning, 1, "[{}] Swapchain failed to acquire next image [{}]", g_name,
+				  m_storage.acquired ? g_vkResultStr[m_storage.acquired->result] : "Unknown Error");
+		m_storage.acquired.reset();
 		return std::nullopt;
 	}
-	m_storage.imageIndex = (u32)acquire->value;
+	m_storage.imageIndex = (u32)m_storage.acquired->value;
 	auto& frame = m_storage.frame();
 	m_device.get().waitFor(frame.drawn);
 	return frame.target;
@@ -174,6 +151,11 @@ std::optional<RenderTarget> Swapchain::acquireNextImage(vk::Semaphore setDrawRea
 
 bool Swapchain::present(vk::Semaphore drawWait, vk::Fence onDrawn) {
 	if (m_storage.flags.any(Flag::ePaused | Flag::eOutOfDate)) {
+		return false;
+	}
+	if (!m_storage.acquired) {
+		g_log.log(lvl::warning, 1, "[{}] Attempt to present image without acquiring one", g_name);
+		orientCheck();
 		return false;
 	}
 	Frame& frame = m_storage.frame();
@@ -190,9 +172,11 @@ bool Swapchain::present(vk::Semaphore drawWait, vk::Fence onDrawn) {
 	} catch (vk::OutOfDateKHRError const& e) {
 		g_log.log(lvl::warning, 1, "[{}] Swapchain Failed to present image [{}]", g_name, e.what());
 		m_storage.flags.set(Flag::eOutOfDate);
+		m_storage.acquired.reset();
 		return false;
 	}
-	setFlags(m_storage.flags, result);
+	setFlags(result);
+	m_storage.acquired.reset();
 	if (result != vk::Result::eSuccess && result != vk::Result::eSuboptimalKHR) {
 		g_log.log(lvl::warning, 1, "[{}] Swapchain Failed to present image [{}]", g_name, g_vkResultStr[result]);
 		return false;
@@ -239,7 +223,7 @@ vk::RenderPass Swapchain::renderPass() const noexcept {
 
 bool Swapchain::construct(glm::ivec2 framebufferSize) {
 	m_storage = {};
-	SwapchainCreateInfo info(m_device.get().m_physicalDevice, m_metadata.surface, m_metadata.info);
+	SwapchainCreateInfo info(m_device.get().m_physicalDevice.device, m_metadata.surface, m_metadata.info);
 	m_metadata.availableModes = std::move(info.availableModes);
 	{
 		vk::SwapchainCreateInfoKHR createInfo;
@@ -361,18 +345,29 @@ void Swapchain::destroy(Storage& out_storage, bool bMeta) {
 	out_storage = {};
 }
 
-void Swapchain::orientCheck() {
-	auto const capabilities = m_device.get().m_physicalDevice.getSurfaceCapabilitiesKHR(m_metadata.surface);
-	if (capabilities.currentTransform != m_storage.current.transform) {
-		using vkst = vk::SurfaceTransformFlagBitsKHR;
-		auto const c = capabilities.currentTransform;
-		if (m_metadata.original->transform == vkst::eIdentity || m_metadata.original->transform == vkst::eRotate180) {
-			m_storage.flags[Flag::eRotated] = c == vkst::eRotate90 || c == vkst::eRotate270;
-		} else if (m_metadata.original->transform == vkst::eRotate90 || m_metadata.original->transform == vkst::eRotate270) {
-			m_storage.flags[Flag::eRotated] = c == vkst::eIdentity || c == vkst::eRotate180;
+void Swapchain::setFlags(vk::Result result) {
+	switch (result) {
+	case vk::Result::eSuboptimalKHR: {
+		if (!m_storage.flags.test(Swapchain::Flag::eSuboptimal)) {
+			g_log.log(lvl::debug, 0, "[{}] Vulkan swapchain is suboptimal", g_name);
 		}
-		m_storage.current.transform = capabilities.currentTransform;
+		m_storage.flags.set(Swapchain::Flag::eSuboptimal);
+		break;
 	}
+	case vk::Result::eErrorOutOfDateKHR: {
+		if (!m_storage.flags.test(Swapchain::Flag::eOutOfDate)) {
+			g_log.log(lvl::debug, 0, "[{}] Vulkan swapchain is out of date", g_name);
+		}
+		m_storage.flags.set(Swapchain::Flag::eOutOfDate);
+		break;
+	}
+	default:
+		break;
+	}
+}
+
+void Swapchain::orientCheck() {
+	auto const capabilities = m_device.get().m_physicalDevice.surfaceCapabilities(m_metadata.surface);
 	if (capabilities.currentExtent != maths::max<u32>() && capabilities.currentExtent != m_storage.current.extent) {
 		m_storage.flags.set(Flag::eOutOfDate);
 	}

@@ -69,7 +69,7 @@ class RenderContext : NoCopy {
 
 	Status status() const noexcept;
 	std::size_t index() const noexcept;
-	glm::ivec2 extent(bool bWithRotation) const noexcept;
+	glm::ivec2 extent() const noexcept;
 	bool reconstructed(glm::ivec2 framebufferSize);
 
 	View<Pipeline> makePipeline(std::string_view id, Pipeline::CreateInfo createInfo);
@@ -141,7 +141,7 @@ Pipeline::CreateInfo RenderContext::pipeInfo(Shader const& shader, PFlags flags)
 }
 
 inline f32 RenderContext::aspectRatio() const noexcept {
-	glm::ivec2 const ext = extent(true);
+	glm::ivec2 const ext = extent();
 	return f32(ext.x) / std::max(f32(ext.y), 1.0f);
 }
 
@@ -151,10 +151,9 @@ inline std::size_t RenderContext::index() const noexcept {
 inline RenderContext::Status RenderContext::status() const noexcept {
 	return m_storage.status;
 }
-inline glm::ivec2 RenderContext::extent(bool bWithRotation) const noexcept {
+inline glm::ivec2 RenderContext::extent() const noexcept {
 	vk::Extent2D const ext = m_swapchain.get().m_storage.current.extent;
-	bool const bRotated = bWithRotation && m_swapchain.get().m_storage.flags.test(Swapchain::Flag::eRotated);
-	return bRotated ? glm::ivec2(ext.height, ext.width) : glm::ivec2(ext.width, ext.height);
+	return glm::ivec2(ext.width, ext.height);
 }
 inline vk::Format RenderContext::colourFormat() const noexcept {
 	return m_swapchain.get().m_metadata.formats.colour;

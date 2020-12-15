@@ -1,0 +1,60 @@
+#pragma once
+#include <graphics/types.hpp>
+
+namespace le::graphics {
+struct PhysicalDevice final {
+	vk::PhysicalDevice device;
+	vk::PhysicalDeviceProperties properties;
+	vk::PhysicalDeviceFeatures2 features2;
+	std::vector<vk::QueueFamilyProperties> queueFamilies;
+
+	inline std::string_view name() const noexcept {
+		return std::string_view(properties.deviceName);
+	}
+	inline bool discreteGPU() const noexcept {
+		return properties.deviceType == vk::PhysicalDeviceType::eDiscreteGpu;
+	}
+	inline bool integratedGPU() const noexcept {
+		return properties.deviceType == vk::PhysicalDeviceType::eIntegratedGpu;
+	}
+	inline bool virtualGPU() const noexcept {
+		return properties.deviceType == vk::PhysicalDeviceType::eVirtualGpu;
+	}
+
+	bool surfaceSupport(u32 queueFamily, vk::SurfaceKHR surface) const;
+	vk::SurfaceCapabilitiesKHR surfaceCapabilities(vk::SurfaceKHR surface) const;
+};
+
+class DevicePicker {
+  public:
+	using Score = s32;
+
+	inline static constexpr Score discrete = 100;
+	inline static constexpr Score integrated = -20;
+
+	inline static void addIf(Score& out_base, bool predicate, Score mod) noexcept {
+		if (predicate) {
+			out_base += mod;
+		}
+	}
+
+	PhysicalDevice pick(Span<PhysicalDevice> devices) const;
+	Score score(PhysicalDevice const& device) const;
+
+	///
+	/// \brief Override to modify the base score of a device
+	/// (Returns base score by default)
+	///
+	virtual inline Score modify(Score base, PhysicalDevice const&) const {
+		return base;
+	}
+	///
+	/// \brief Override to select a device from a list with identical scores
+	/// (Returns front element by default)
+	///
+	virtual PhysicalDevice tieBreak(Span<Ref<PhysicalDevice const>> devices) const {
+		ENSURE(!devices.empty(), "Empty list");
+		return devices.begin()->get();
+	}
+};
+} // namespace le::graphics

@@ -1,6 +1,4 @@
 #pragma once
-#include <memory>
-#include <optional>
 #include <core/traits.hpp>
 #include <graphics/context/defer_queue.hpp>
 #include <graphics/context/instance.hpp>
@@ -10,15 +8,12 @@ namespace le::graphics {
 class Device final {
   public:
 	enum class QSelect { eOptimal, eSingleFamily, eSingleQueue };
-
-	static constexpr std::array requiredExtensions = {VK_KHR_SWAPCHAIN_EXTENSION_NAME, VK_KHR_MAINTENANCE1_EXTENSION_NAME};
+	inline static constexpr std::array<std::string_view, 2> requiredExtensions = {VK_KHR_SWAPCHAIN_EXTENSION_NAME, VK_KHR_MAINTENANCE1_EXTENSION_NAME};
 
 	struct CreateInfo;
 
 	Device(Instance& instance, vk::SurfaceKHR surface, CreateInfo const& info);
 	~Device();
-
-	std::vector<AvailableDevice> availableDevices() const;
 
 	void waitIdle();
 	bool valid(vk::SurfaceKHR surface) const;
@@ -58,22 +53,23 @@ class Device final {
 	void decrementDeferred();
 
 	Ref<Instance> m_instance;
+	PhysicalDevice m_physicalDevice;
 	vk::Device m_device;
-	vk::PhysicalDevice m_physicalDevice;
 	DeferQueue m_deferred;
 	QueueMultiplex m_queues;
 
 	struct {
-		AvailableDevice picked;
+		std::vector<char const*> extensions;
 		vk::SurfaceKHR surface;
-		std::vector<AvailableDevice> available;
+		std::vector<PhysicalDevice> available;
 		vk::PhysicalDeviceLimits limits;
 		std::pair<f32, f32> lineWidth;
 	} m_metadata;
 };
 
 struct Device::CreateInfo {
-	std::function<AvailableDevice(Span<AvailableDevice>)> pickDevice;
+	Span<std::string_view> extensions = requiredExtensions;
+	DevicePicker* pPicker = nullptr;
 	QSelect qselect = QSelect::eOptimal;
 	bool bPrintAvailable = false;
 };

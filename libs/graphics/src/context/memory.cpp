@@ -13,7 +13,7 @@ Memory::Memory(Device& device) : m_device(device) {
 	auto& dl = inst.m_loader;
 	allocatorInfo.instance = static_cast<VkInstance>(inst.m_instance);
 	allocatorInfo.device = static_cast<VkDevice>(device.m_device);
-	allocatorInfo.physicalDevice = static_cast<VkPhysicalDevice>(device.m_physicalDevice);
+	allocatorInfo.physicalDevice = static_cast<VkPhysicalDevice>(device.m_physicalDevice.device);
 	VmaVulkanFunctions vkFunc = {};
 	vkFunc.vkGetPhysicalDeviceProperties = dl.vkGetPhysicalDeviceProperties;
 	vkFunc.vkGetPhysicalDeviceMemoryProperties = dl.vkGetPhysicalDeviceMemoryProperties;

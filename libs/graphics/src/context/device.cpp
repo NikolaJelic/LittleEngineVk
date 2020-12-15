@@ -8,7 +8,7 @@
 
 namespace le::graphics {
 namespace {
-void listDevices(Span<AvailableDevice> devices) {
+void listDevices(Span<PhysicalDevice> devices) {
 	std::stringstream str;
 	str << "\nAvailable GPUs:";
 	std::size_t idx = 0;
@@ -44,36 +44,32 @@ Device::Device(Instance& instance, vk::SurfaceKHR surface, CreateInfo const& inf
 	}
 	// Prevent validation spam on Windows
 	auto const validationLevel = std::exchange(g_validationLevel, dl::level::warning);
-	m_metadata.surface = surface;
-	m_metadata.available = availableDevices();
+	std::unordered_set<std::string_view> const extSet = {info.extensions.begin(), info.extensions.end()};
+	std::vector<std::string_view> const extArr = {extSet.begin(), extSet.end()};
+	std::vector<PhysicalDevice> const devices = instance.availableDevices(extArr);
+	if (devices.empty()) {
+		g_log.log(lvl::error, 0, "[{}] No compatible Vulkan physical device detected!", g_name);
+		throw std::runtime_error("No physical devices");
+	}
 	if (info.bPrintAvailable) {
-		listDevices(m_metadata.available);
+		listDevices(devices);
 	}
-	if (info.pickDevice) {
-		m_metadata.picked = info.pickDevice(m_metadata.available);
-		if (!default_v(m_metadata.picked.physicalDevice)) {
-			g_log.log(lvl::info, 2, "[{}] Using custom GPU: {}", g_name, m_metadata.picked.name());
-		}
-	}
-	if (default_v(m_metadata.picked.physicalDevice) && !m_metadata.available.empty()) {
-		for (auto const& availableDevice : m_metadata.available) {
-			if (availableDevice.properties.deviceType == vk::PhysicalDeviceType::eDiscreteGpu) {
-				m_metadata.picked = availableDevice;
-				break;
-			}
-		}
-		if (default_v(m_metadata.picked.physicalDevice)) {
-			m_metadata.picked = m_metadata.available.front();
-		}
-	}
-	if (default_v(m_metadata.picked.physicalDevice)) {
+	static DevicePicker const s_picker;
+	DevicePicker const* pPicker = info.pPicker ? info.pPicker : &s_picker;
+	PhysicalDevice picked = pPicker->pick(devices);
+	if (default_v(picked.device)) {
 		throw std::runtime_error("Failed to select a physical device!");
 	}
-	m_physicalDevice = m_metadata.picked.physicalDevice;
-	m_metadata.limits = m_metadata.picked.properties.limits;
-	m_metadata.lineWidth.first = m_metadata.picked.properties.limits.lineWidthRange[0U];
-	m_metadata.lineWidth.second = m_metadata.picked.properties.limits.lineWidthRange[1U];
-	auto families = utils::queueFamilies(m_metadata.picked, m_metadata.surface);
+	m_physicalDevice = std::move(picked);
+	m_metadata.available = std::move(devices);
+	m_metadata.surface = surface;
+	for (auto const& ext : extArr) {
+		m_metadata.extensions.push_back(ext.data());
+	}
+	m_metadata.limits = m_physicalDevice.properties.limits;
+	m_metadata.lineWidth.first = m_physicalDevice.properties.limits.lineWidthRange[0U];
+	m_metadata.lineWidth.second = m_physicalDevice.properties.limits.lineWidthRange[1U];
+	auto families = utils::queueFamilies(m_physicalDevice, m_metadata.surface);
 	if (info.qselect == QSelect::eSingleFamily || info.qselect == QSelect::eSingleQueue) {
 		std::optional<QueueFamily> uber;
 		for (auto const& family : families) {
@@ -93,11 +89,11 @@ Device::Device(Instance& instance, vk::SurfaceKHR surface, CreateInfo const& inf
 	}
 	auto queueCreateInfos = m_queues.select(families);
 	vk::PhysicalDeviceFeatures deviceFeatures;
-	deviceFeatures.fillModeNonSolid = m_metadata.picked.features2.features.fillModeNonSolid;
-	deviceFeatures.wideLines = m_metadata.picked.features2.features.wideLines;
+	deviceFeatures.fillModeNonSolid = m_physicalDevice.features2.features.fillModeNonSolid;
+	deviceFeatures.wideLines = m_physicalDevice.features2.features.wideLines;
 	using DIF = vk::PhysicalDeviceDescriptorIndexingFeatures;
 	DIF descriptorIndexingFeatures;
-	if (auto pIndexingFeatures = fromNextChain<DIF>(m_metadata.picked.features2.pNext, vk::StructureType::ePhysicalDeviceDescriptorIndexingFeatures)) {
+	if (auto pIndexingFeatures = fromNextChain<DIF>(m_physicalDevice.features2.pNext, vk::StructureType::ePhysicalDeviceDescriptorIndexingFeatures)) {
 		// TODO: check before enabling
 		descriptorIndexingFeatures.runtimeDescriptorArray = pIndexingFeatures->runtimeDescriptorArray;
 	}
@@ -110,35 +106,13 @@ Device::Device(Instance& instance, vk::SurfaceKHR surface, CreateInfo const& inf
 		deviceCreateInfo.enabledLayerCount = (u32)instance.m_metadata.layers.size();
 		deviceCreateInfo.ppEnabledLayerNames = instance.m_metadata.layers.data();
 	}
-	deviceCreateInfo.enabledExtensionCount = (u32)requiredExtensions.size();
-	deviceCreateInfo.ppEnabledExtensionNames = requiredExtensions.data();
-	m_device = m_physicalDevice.createDevice(deviceCreateInfo);
+	deviceCreateInfo.enabledExtensionCount = (u32)m_metadata.extensions.size();
+	deviceCreateInfo.ppEnabledExtensionNames = m_metadata.extensions.data();
+	m_device = m_physicalDevice.device.createDevice(deviceCreateInfo);
 	m_queues.setup(m_device);
 	instance.m_loader.init(m_device);
-	g_log.log(lvl::info, 2, "[{}] Vulkan device constructed, using GPU {}", g_name, m_metadata.picked.name());
+	g_log.log(lvl::info, 2, "[{}] Vulkan device constructed, using GPU {}", g_name, m_physicalDevice.name());
 	g_validationLevel = validationLevel;
-}
-
-std::vector<AvailableDevice> Device::availableDevices() const {
-	std::vector<AvailableDevice> ret;
-	auto physicalDevices = m_instance.get().m_instance.enumeratePhysicalDevices();
-	ret.reserve(physicalDevices.size());
-	for (auto const& physDev : physicalDevices) {
-		std::unordered_set<std::string_view> missingExtensions(requiredExtensions.begin(), requiredExtensions.end());
-		auto const extensions = physDev.enumerateDeviceExtensionProperties();
-		for (std::size_t idx = 0; idx < extensions.size() && !missingExtensions.empty(); ++idx) {
-			missingExtensions.erase(std::string_view(extensions[idx].extensionName));
-		}
-		if (missingExtensions.empty()) {
-			AvailableDevice availableDevice;
-			availableDevice.properties = physDev.getProperties();
-			availableDevice.queueFamilies = physDev.getQueueFamilyProperties();
-			availableDevice.features2 = physDev.getFeatures2();
-			availableDevice.physicalDevice = physDev;
-			ret.push_back(std::move(availableDevice));
-		}
-	}
-	return ret;
 }
 
 Device::~Device() {
@@ -150,10 +124,7 @@ Device::~Device() {
 }
 
 bool Device::valid(vk::SurfaceKHR surface) const {
-	if (!default_v(m_physicalDevice)) {
-		return m_physicalDevice.getSurfaceSupportKHR(m_queues.familyIndex(QType::ePresent), surface);
-	}
-	return false;
+	return m_physicalDevice.surfaceSupport(m_queues.familyIndex(QType::ePresent), surface);
 }
 
 void Device::waitIdle() {

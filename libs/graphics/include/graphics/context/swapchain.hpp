@@ -11,7 +11,7 @@ class Device;
 
 class Swapchain {
   public:
-	enum class Flag : s8 { ePaused, eOutOfDate, eSuboptimal, eRotated, eCOUNT_ };
+	enum class Flag : s8 { ePaused, eOutOfDate, eSuboptimal, eCOUNT_ };
 	using Flags = kt::enum_flags<Flag>;
 
 	struct Frame {
@@ -27,6 +27,7 @@ class Swapchain {
 		vk::ImageView depthImageView;
 		vk::SwapchainKHR swapchain;
 		std::vector<Frame> frames;
+		std::optional<vk::ResultValue<u32>> acquired;
 
 		Display current;
 		u32 imageIndex = 0;
@@ -90,6 +91,7 @@ class Swapchain {
 	bool construct(glm::ivec2 framebufferSize);
 	void makeRenderPass();
 	void destroy(Storage& out_storage, bool bMeta);
+	void setFlags(vk::Result result);
 	void orientCheck();
 };
 

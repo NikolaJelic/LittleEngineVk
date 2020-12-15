@@ -211,7 +211,7 @@ void utils::release(RawImage rawImage) {
 	}
 }
 
-std::vector<QueueFamily> utils::queueFamilies(AvailableDevice const& device, vk::SurfaceKHR surface) {
+std::vector<QueueFamily> utils::queueFamilies(PhysicalDevice const& device, vk::SurfaceKHR surface) {
 	using vkqf = vk::QueueFlagBits;
 	std::vector<QueueFamily> ret;
 	u32 fidx = 0;
@@ -219,7 +219,7 @@ std::vector<QueueFamily> utils::queueFamilies(AvailableDevice const& device, vk:
 		QueueFamily family;
 		family.familyIndex = fidx;
 		family.total = props.queueCount;
-		bool const bSurfaceSupport = device.physicalDevice.getSurfaceSupportKHR(fidx, surface);
+		bool const bSurfaceSupport = device.device.getSurfaceSupportKHR(fidx, surface);
 		if ((props.queueFlags & vkqf::eTransfer) == vkqf::eTransfer) {
 			family.flags.set(QType::eTransfer);
 		}
