@@ -1,5 +1,6 @@
 #pragma once
 #include <cassert>
+#include <core/lib_logger.hpp>
 #include <core/mono_instance.hpp>
 #include <window/event_queue.hpp>
 #include <window/surface.hpp>
@@ -33,6 +34,7 @@ class Instance : public TMonoInstance<T>, public TSurface<T> {
 	}
 
   protected:
+	LibLogger m_log;
 	Status m_status = Status::eIdle;
 
   private:
@@ -52,6 +54,7 @@ struct CreateInfo {
 	} config;
 
 	struct {
+		LibLogger::Verbosity verbosity = LibLogger::Verbosity::eLibUser;
 		Style style = Style::eDecoratedWindow;
 		u8 screenID = 0;
 		bool bCentreCursor = true;

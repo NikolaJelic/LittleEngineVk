@@ -3,11 +3,11 @@
 
 namespace le::graphics {
 VRAM::VRAM(Device& device, Transfer::CreateInfo const& transferInfo) : Memory(device), m_transfer(*this, transferInfo), m_device(device) {
-	logD("[{}] VRAM constructed", g_name);
+	g_log.log(lvl::info, 1, "[{}] VRAM constructed", g_name);
 }
 
 VRAM::~VRAM() {
-	logD("[{}] VRAM destroyed", g_name);
+	g_log.log(lvl::info, 1, "[{}] VRAM destroyed", g_name);
 }
 
 View<Buffer> VRAM::createBO(std::string_view name, vk::DeviceSize size, vk::BufferUsageFlags usage, bool bHostVisible) {
@@ -42,11 +42,11 @@ VRAM::Future VRAM::copy(CView<Buffer> src, View<Buffer> dst, vk::DeviceSize size
 	bool const bSizes = dst->writeSize >= size;
 	ENSURE(bSizes, "Invalid buffer sizes!");
 	if (!bReady) {
-		logE("[{}] Source/destination buffers missing QType::eTransfer!", g_name);
+		g_log.log(lvl::error, 1, "[{}] Source/destination buffers missing QType::eTransfer!", g_name);
 		return {};
 	}
 	if (!bSizes) {
-		logE("[{}] Source buffer is larger than destination buffer!", g_name);
+		g_log.log(lvl::error, 1, "[{}] Source buffer is larger than destination buffer!", g_name);
 		return {};
 	}
 	[[maybe_unused]] auto const indices = m_device.get().m_queues.familyIndices(QType::eGraphics | QType::eTransfer);
@@ -83,7 +83,7 @@ VRAM::Future VRAM::stage(View<Buffer> deviceBuffer, void const* pData, vk::Devic
 	bool const bQueueFlags = deviceBuffer->queueFlags.test(QType::eTransfer);
 	ENSURE(bQueueFlags, "Invalid queue flags!");
 	if (!bQueueFlags) {
-		logE("[{}] Invalid queue flags on source buffer!", g_name);
+		g_log.log(lvl::error, 1, "[{}] Invalid queue flags on source buffer!", g_name);
 		return {};
 	}
 	bytearray data((std::size_t)size, {});
@@ -102,7 +102,7 @@ VRAM::Future VRAM::stage(View<Buffer> deviceBuffer, void const* pData, vk::Devic
 			stage.command.end();
 			m_transfer.addStage(std::move(stage), std::move(p));
 		} else {
-			logE("[{}] Error staging data!", g_name);
+			g_log.log(lvl::error, 1, "[{}] Error staging data!", g_name);
 			p->set_value();
 		}
 	};

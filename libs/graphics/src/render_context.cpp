@@ -29,7 +29,7 @@ RenderContext::Render::~Render() {
 void RenderContext::Render::destroy() {
 	if (!default_v(m_frame.primary.m_cmd)) {
 		if (!m_context.get().endFrame()) {
-			logD("[{}] RenderContext failed to end frame", g_name);
+			g_log.log(lvl::warning, 1, "[{}] RenderContext failed to end frame", g_name);
 		}
 	}
 }
@@ -126,7 +126,7 @@ bool RenderContext::waitForFrame() {
 		return true;
 	}
 	if (m_storage.status != Status::eWaiting) {
-		logW("[{}] Invalid RenderContext status", g_name);
+		g_log.log(lvl::warning, 1, "[{}] Invalid RenderContext status", g_name);
 		return false;
 	}
 	auto& sync = m_sync.get();
@@ -138,7 +138,7 @@ bool RenderContext::waitForFrame() {
 
 std::optional<RenderContext::Frame> RenderContext::beginFrame(CommandBuffer::PassInfo const& info) {
 	if (m_storage.status != Status::eReady) {
-		logW("[{}] Invalid RenderContext status", g_name);
+		g_log.log(lvl::warning, 1, "[{}] Invalid RenderContext status", g_name);
 		return std::nullopt;
 	}
 	if (m_swapchain.get().flags().any(Swapchain::Flag::ePaused | Swapchain::Flag::eOutOfDate)) {
@@ -172,7 +172,7 @@ std::optional<RenderContext::Render> RenderContext::render(Colour clear, vk::Cle
 
 bool RenderContext::endFrame() {
 	if (m_storage.status != Status::eDrawing) {
-		logW("[{}] Invalid RenderContext status", g_name);
+		g_log.log(lvl::warning, 1, "[{}] Invalid RenderContext status", g_name);
 		return false;
 	}
 	FrameSync& sync = m_sync.get();
@@ -215,7 +215,7 @@ View<Pipeline> RenderContext::makePipeline(std::string_view id, Pipeline::Create
 	if (!bResult || iter == m_storage.pipes.end()) {
 		throw std::runtime_error("Map insertion failure");
 	}
-	logD("[{}] Pipeline [{}] constructed", g_name, id);
+	g_log.log(lvl::info, 1, "[{}] Pipeline [{}] constructed", g_name, id);
 	return iter->second;
 }
 

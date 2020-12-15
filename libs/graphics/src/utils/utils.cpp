@@ -11,9 +11,9 @@ struct Spv : Singleton<Spv> {
 	Spv() {
 		if (os::sysCall("{} --version", utils::g_compiler)) {
 			bOnline = true;
-			logD("[{}] SPIR-V compiler [{}] online", g_name, utils::g_compiler);
+			g_log.log(lvl::info, 1, "[{}] SPIR-V compiler [{}] online", g_name, utils::g_compiler);
 		} else {
-			logW("[{}] Failed to bring SPIR-V compiler [{}] online", g_name, utils::g_compiler);
+			g_log.log(lvl::warning, 1, "[{}] Failed to bring SPIR-V compiler [{}] online", g_name, utils::g_compiler);
 		}
 	}
 
@@ -125,10 +125,10 @@ std::optional<io::Path> utils::compileGlsl(io::Path const& src, io::Path dst, io
 	auto const flags = bDebug ? "-g" : std::string_view();
 	auto const result = Spv::inst().compile(io::absolute(prefix / src), io::absolute(prefix / d), flags);
 	if (!result.empty()) {
-		logW("[{}] Failed to compile GLSL [{}] to SPIR-V: {}", g_name, src.generic_string(), result);
+		g_log.log(lvl::warning, 1, "[{}] Failed to compile GLSL [{}] to SPIR-V: {}", g_name, src.generic_string(), result);
 		return std::nullopt;
 	}
-	logD("[{}] Compiled GLSL [{}] to SPIR-V [{}]", g_name, src.generic_string(), d.generic_string());
+	g_log.log(lvl::info, 1, "[{}] Compiled GLSL [{}] to SPIR-V [{}]", g_name, src.generic_string(), d.generic_string());
 	return d;
 }
 
@@ -197,7 +197,7 @@ RawImage utils::decompress(bytearray imgBytes, u8 channels) {
 	auto pIn = reinterpret_cast<stbi_uc const*>(imgBytes.data());
 	auto pOut = stbi_load_from_memory(pIn, (int)imgBytes.size(), &ret.width, &ret.height, &ch, (int)channels);
 	if (!pOut) {
-		logW("[{}] Failed to decompress image data", g_name);
+		g_log.log(lvl::warning, 1, "[{}] Failed to decompress image data", g_name);
 		return {};
 	}
 	std::size_t const size = (std::size_t)(ret.width * ret.height * channels);

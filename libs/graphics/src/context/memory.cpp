@@ -42,7 +42,7 @@ Memory::Memory(Device& device) : m_device(device) {
 	for (auto& count : m_allocations) {
 		count.store(0);
 	}
-	logD("[{}] Memory constructed", g_name);
+	g_log.log(lvl::info, 1, "[{}] Memory constructed", g_name);
 }
 
 Memory::~Memory() {
@@ -57,7 +57,7 @@ Memory::~Memory() {
 		}
 	}
 	vmaDestroyAllocator(m_allocator);
-	logD("[{}] Memory destroyed", g_name);
+	g_log.log(lvl::info, 1, "[{}] Memory destroyed", g_name);
 }
 
 View<Buffer> Memory::construct(Buffer::CreateInfo const& info, [[maybe_unused]] bool bSilent) {
@@ -94,9 +94,9 @@ View<Buffer> Memory::construct(Buffer::CreateInfo const& info, [[maybe_unused]] 
 		if (!bSilent) {
 			auto [size, unit] = utils::friendlySize(buffer.writeSize);
 #if defined(LEVK_VKRESOURCE_NAMES)
-			log(m_logLevel, "== [{}] Buffer [{}] allocated: [{:.2f}{}] | {}", g_name, buffer.name, size, unit, logCount());
+			g_log.log(m_logLevel, 1, "== [{}] Buffer [{}] allocated: [{:.2f}{}] | {}", g_name, buffer.name, size, unit, logCount());
 #else
-			log(m_logLevel, "== [{}] Buffer allocated: [{:.2f}{}] | {}", g_name, size, unit, logCount());
+			g_log.log(m_logLevel, 1, "== [{}] Buffer allocated: [{:.2f}{}] | {}", g_name, size, unit, logCount());
 #endif
 		}
 	}
@@ -122,9 +122,9 @@ bool Memory::destroy(View<Buffer> buffer, [[maybe_unused]] bool bSilent) {
 bool Memory::mapMemory(Buffer& out_buffer) const {
 	if (out_buffer.type != Buffer::Type::eCpuToGpu) {
 #if defined(LEVK_VKRESOURCE_NAMES)
-		logE("[{}] Attempt to map GPU-only Buffer [{}]!", g_name, out_buffer.name);
+		g_log.log(lvl::error, 1, "[{}] Attempt to map GPU-only Buffer [{}]!", g_name, out_buffer.name);
 #else
-		logE("[{}] Attempt to map GPU-only Buffer!", g_name);
+		g_log.log(lvl::error, 1, "[{}] Attempt to map GPU-only Buffer!", g_name);
 #endif
 		return false;
 	}
@@ -145,9 +145,9 @@ void Memory::unmapMemory(Buffer& out_buffer) const {
 bool Memory::write(Buffer& out_buffer, void const* pData, Buffer::Span const& range) const {
 	if (out_buffer.type != Buffer::Type::eCpuToGpu) {
 #if defined(LEVK_VKRESOURCE_NAMES)
-		logE("[{}] Attempt to write to GPU-only Buffer [{}]!", g_name, out_buffer.name);
+		g_log.log(lvl::error, 1, "[{}] Attempt to write to GPU-only Buffer [{}]!", g_name, out_buffer.name);
 #else
-		logE("[{}] Attempt to write to GPU-only Buffer!", g_name);
+		g_log.log(lvl::error, 1, "[{}] Attempt to write to GPU-only Buffer!", g_name);
 #endif
 		return false;
 	}
@@ -194,9 +194,9 @@ View<Image> Memory::construct(Image::CreateInfo const& info) {
 	if (m_bLogAllocs) {
 		auto [size, unit] = utils::friendlySize(ret.allocatedSize);
 #if defined(LEVK_VKRESOURCE_NAMES)
-		log(m_logLevel, "== [{}] Image [{}] allocated: [{:.2f}{}] | {}", g_name, ret.name, size, unit, logCount());
+		g_log.log(m_logLevel, 1, "== [{}] Image [{}] allocated: [{:.2f}{}] | {}", g_name, ret.name, size, unit, logCount());
 #else
-		log(m_logLevel, "== [{}] Image allocated: [{:.2f}{}] | {}", g_name, size, unit, logCount());
+		g_log.log(m_logLevel, 1, "== [{}] Image allocated: [{:.2f}{}] | {}", g_name, size, unit, logCount());
 #endif
 	}
 	auto lock = m_mutex.lock();
@@ -234,9 +234,9 @@ void Memory::destroyImpl(Buffer& out_buffer, bool bSilent) {
 			if (out_buffer.info.actualSize) {
 				auto [size, unit] = utils::friendlySize(out_buffer.writeSize);
 #if defined(LEVK_VKRESOURCE_NAMES)
-				log(m_logLevel, "-- [{}] Buffer [{}] released: [{:.2f}{}] | {}", g_name, out_buffer.name, size, unit, logCount());
+				g_log.log(m_logLevel, 1, "-- [{}] Buffer [{}] released: [{:.2f}{}] | {}", g_name, out_buffer.name, size, unit, logCount());
 #else
-				log(m_logLevel, "-- [{}] Buffer released: [{:.2f}{}] | {}", g_name, size, unit, logCount());
+				g_log.log(m_logLevel, 1, "-- [{}] Buffer released: [{:.2f}{}] | {}", g_name, size, unit, logCount());
 #endif
 			}
 		}
@@ -249,9 +249,9 @@ void Memory::destroyImpl(Image& out_image) {
 		if (out_image.info.actualSize > 0) {
 			auto [size, unit] = utils::friendlySize(out_image.allocatedSize);
 #if defined(LEVK_VKRESOURCE_NAMES)
-			log(m_logLevel, "-- [{}] Image [{}] released: [{:.2f}{}] | {}", g_name, out_image.name, size, unit, logCount());
+			g_log.log(m_logLevel, 1, "-- [{}] Image [{}] released: [{:.2f}{}] | {}", g_name, out_image.name, size, unit, logCount());
 #else
-			log(m_logLevel, "-- [{}] Image released: [{:.2f}{}] | {}", g_name, size, unit, logCount());
+			g_log.log(m_logLevel, 1, "-- [{}] Image released: [{:.2f}{}] | {}", g_name, size, unit, logCount());
 #endif
 		}
 	}

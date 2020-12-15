@@ -42,24 +42,24 @@ Transfer::Transfer(Memory& memory, CreateInfo const& info) : m_memory(memory) {
 				}
 			}
 		}
-		logD("[{}] Transfer thread started", g_name);
+		g_log.log(lvl::info, 1, "[{}] Transfer thread started", g_name);
 		while (auto f = m_queue.pop()) {
 			(*f)();
 		}
-		logD("[{}] Transfer thread completed", g_name);
+		g_log.log(lvl::info, 1, "[{}] Transfer thread completed", g_name);
 	});
 	if (info.autoPollRate && *info.autoPollRate > 0ms) {
 		m_sync.bPoll.store(true);
 		m_sync.pollThread = threads::newThread([this, rate = *info.autoPollRate]() {
-			logD("[{}] Transfer poll thread started", g_name);
+			g_log.log(lvl::info, 1, "[{}] Transfer poll thread started", g_name);
 			while (m_sync.bPoll.load()) {
 				update();
 				threads::sleep(rate);
 			}
-			logD("[{}] Transfer poll thread completed", g_name);
+			g_log.log(lvl::info, 1, "[{}] Transfer poll thread completed", g_name);
 		});
 	}
-	logD("[{}] Transfer constructed", g_name);
+	g_log.log(lvl::info, 1, "[{}] Transfer constructed", g_name);
 }
 
 Transfer::~Transfer() {
@@ -81,7 +81,7 @@ Transfer::~Transfer() {
 	}
 	m_data = {};
 	m_batches = {};
-	logD("[{}] Transfer destroyed", g_name);
+	g_log.log(lvl::info, 1, "[{}] Transfer destroyed", g_name);
 }
 
 std::size_t Transfer::update() {

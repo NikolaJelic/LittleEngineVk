@@ -21,7 +21,7 @@ BufferedFrameSync::BufferedFrameSync(Device& device, std::size_t size, u32 secon
 		}
 		sync.index = (u32)idx++;
 	}
-	logD("[{}] BufferedFrameSync (x{}) constructed", g_name, size);
+	g_log.log(lvl::info, 1, "[{}] BufferedFrameSync (x{}) constructed", g_name, size);
 }
 
 BufferedFrameSync::BufferedFrameSync(BufferedFrameSync&& rhs) : m_device(rhs.m_device) {
@@ -58,7 +58,7 @@ void BufferedFrameSync::refreshSync() {
 			sync.presentReady = d.createSemaphore();
 			sync.drawing = d.createFence(true);
 		}
-		logD("[{}] BufferedFrameSync refreshed", g_name);
+		g_log.log(lvl::info, 1, "[{}] BufferedFrameSync refreshed", g_name);
 	}
 }
 
@@ -74,7 +74,7 @@ void BufferedFrameSync::destroy() {
 				}
 			}
 		});
-		logD("[{}] BufferedFrameSync destroyed", g_name);
+		g_log.log(lvl::info, 1, "[{}] BufferedFrameSync destroyed", g_name);
 	}
 }
 } // namespace le::graphics

@@ -32,7 +32,7 @@ DescriptorSet::DescriptorSet(VRAM& vram, CreateInfo const& info) : m_vram(vram),
 			set.bindings[b].type = bindingInfo.binding.descriptorType;
 			set.bindings[b].count = bindingInfo.binding.descriptorCount;
 			set.bindings[b].name = bindingInfo.name;
-			logD("[{}] DescriptorSet [{}] binding [{}] [{}] constructed", g_name, info.setNumber, b, bindingInfo.name);
+			g_log.log(lvl::info, 1, "[{}] DescriptorSet [{}] binding [{}] [{}] constructed", g_name, info.setNumber, b, bindingInfo.name);
 		}
 		set.pool = m_device.get().createDescriptorPool(poolSizes, 1);
 		set.set = m_device.get().allocateDescriptorSets(set.pool, m_storage.layout, 1).front();
@@ -208,7 +208,9 @@ void DescriptorSet::destroy() {
 					v.destroy(b);
 				}
 			}
-			logD_if(!b.ts.empty(), "[{}] DescriptorSet [{}] destroyed", g_name, sn);
+			if (!b.ts.empty()) {
+				g_log.log(lvl::info, 1, "[{}] DescriptorSet [{}] destroyed", g_name, sn);
+			}
 		}
 	});
 }

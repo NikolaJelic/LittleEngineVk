@@ -52,7 +52,7 @@ Device::Device(Instance& instance, vk::SurfaceKHR surface, CreateInfo const& inf
 	if (info.pickDevice) {
 		m_metadata.picked = info.pickDevice(m_metadata.available);
 		if (!default_v(m_metadata.picked.physicalDevice)) {
-			logI("[{}] Using custom GPU: {}", g_name, m_metadata.picked.name());
+			g_log.log(lvl::info, 2, "[{}] Using custom GPU: {}", g_name, m_metadata.picked.name());
 		}
 	}
 	if (default_v(m_metadata.picked.physicalDevice) && !m_metadata.available.empty()) {
@@ -79,13 +79,13 @@ Device::Device(Instance& instance, vk::SurfaceKHR surface, CreateInfo const& inf
 		for (auto const& family : families) {
 			if (family.flags.all(QFlags::inverse())) {
 				uber = family;
-				logI("[{}] Forcing single Vulkan queue family [{}]", g_name, family.familyIndex);
+				g_log.log(lvl::info, 1, "[{}] Forcing single Vulkan queue family [{}]", g_name, family.familyIndex);
 				break;
 			}
 		}
 		if (uber) {
 			if (info.qselect == QSelect::eSingleQueue) {
-				logI("[{}] Forcing single Vulkan queue (family supports [{}])", g_name, uber->total);
+				g_log.log(lvl::info, 1, "[{}] Forcing single Vulkan queue (family supports [{}])", g_name, uber->total);
 				uber->total = 1;
 			}
 			families = {*uber};
@@ -115,7 +115,7 @@ Device::Device(Instance& instance, vk::SurfaceKHR surface, CreateInfo const& inf
 	m_device = m_physicalDevice.createDevice(deviceCreateInfo);
 	m_queues.setup(m_device);
 	instance.m_loader.init(m_device);
-	logD("[{}] Vulkan device constructed, using GPU {}", g_name, m_metadata.picked.name());
+	g_log.log(lvl::info, 2, "[{}] Vulkan device constructed, using GPU {}", g_name, m_metadata.picked.name());
 	g_validationLevel = validationLevel;
 }
 
@@ -143,7 +143,9 @@ std::vector<AvailableDevice> Device::availableDevices() const {
 
 Device::~Device() {
 	waitIdle();
-	logD_if(!default_v(m_device), "[{}] Vulkan device destroyed", g_name);
+	if (!default_v(m_device)) {
+		g_log.log(lvl::info, 1, "[{}] Vulkan device destroyed", g_name);
+	}
 	destroy(m_metadata.surface, m_device);
 }
 
@@ -185,7 +187,7 @@ void Device::waitFor(vk::Fence optional) const {
 			auto const result = m_device.waitForFences(optional, true, s_wait);
 			ENSURE(result != vk::Result::eTimeout && result != vk::Result::eErrorDeviceLost, "Fence wait failure!");
 			if (result == vk::Result::eTimeout || result == vk::Result::eErrorDeviceLost) {
-				logE("[{}] Fence wait failure!", g_name);
+				g_log.log(lvl::error, 1, "[{}] Fence wait failure!", g_name);
 			}
 		} else {
 			m_device.waitForFences(optional, true, maths::max<u64>());
@@ -200,7 +202,7 @@ void Device::waitAll(vAP<vk::Fence> validFences) const {
 			auto const result = m_device.waitForFences(std::move(validFences), true, s_wait);
 			ENSURE(result != vk::Result::eTimeout && result != vk::Result::eErrorDeviceLost, "Fence wait failure!");
 			if (result == vk::Result::eTimeout || result == vk::Result::eErrorDeviceLost) {
-				logE("[{}] Fence wait failure!", g_name);
+				g_log.log(lvl::error, 1, "[{}] Fence wait failure!", g_name);
 			}
 		} else {
 			m_device.waitForFences(std::move(validFences), true, maths::max<u64>());

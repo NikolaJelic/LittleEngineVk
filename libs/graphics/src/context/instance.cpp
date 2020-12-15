@@ -30,23 +30,23 @@ VKAPI_ATTR vk::Bool32 VKAPI_CALL validationCallback(VkDebugUtilsMessageSeverityF
 	static constexpr std::string_view name = "vk::validation";
 	switch (messageSeverity) {
 	case VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT:
-		logE("[{}] {}", name, VK_LOG_MSG);
+		g_log.log(lvl::error, 2, "[{}] {}", name, VK_LOG_MSG);
 		ENSURE(false, VK_LOG_MSG);
 		return true;
 	case VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT:
 		if (g_validationLevel <= dl::level::warning) {
-			logW("[{}] {}", name, VK_LOG_MSG);
+			g_log.log(lvl::warning, 1, "[{}] {}", name, VK_LOG_MSG);
 		}
 		break;
 	default:
 	case VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT:
 		if (g_validationLevel <= dl::level::info) {
-			logI("[{}] {}", name, VK_LOG_MSG);
+			g_log.log(lvl::info, 1, "[{}] {}", name, VK_LOG_MSG);
 		}
 		break;
 	case VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT:
 		if (g_validationLevel <= dl::level::debug) {
-			logD("[{}] {}", name, VK_LOG_MSG);
+			g_log.log(lvl::debug, 0, "[{}] {}", name, VK_LOG_MSG);
 		}
 		break;
 	}
@@ -130,7 +130,7 @@ Instance::Instance(CreateInfo const& info) {
 		ENSURE(m_loader.vkCreateDebugUtilsMessengerEXT, "Function pointer is null");
 		m_messenger = m_instance.createDebugUtilsMessengerEXT(createInfo, nullptr, m_loader);
 	}
-	logD("[{}] Vulkan instance constructed", g_name);
+	g_log.log(lvl::info, 1, "[{}] Vulkan instance constructed", g_name);
 	g_validationLevel = info.validationLog;
 }
 
@@ -144,7 +144,7 @@ void Instance::destroy() {
 			m_instance.destroy(m_messenger, nullptr, m_loader);
 			m_messenger = vk::DebugUtilsMessengerEXT();
 		}
-		logD("[{}] Vulkan instance destroyed", g_name);
+		g_log.log(lvl::info, 1, "[{}] Vulkan instance destroyed", g_name);
 		m_instance.destroy();
 		m_instance = vk::Instance();
 	}

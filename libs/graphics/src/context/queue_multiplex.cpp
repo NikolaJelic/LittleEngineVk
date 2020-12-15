@@ -17,7 +17,9 @@ class Selector {
 		}
 		bool const valid = found.all(QFlags::inverse());
 		ENSURE(valid, "Required queues not present");
-		logE_if(!valid, "[{}] Required Vulkan Queues not present on selected physical device!");
+		if (!valid) {
+			g_log.log(lvl::error, 2, "[{}] Required Vulkan Queues not present on selected physical device!");
+		}
 	}
 
 	QueueFamily* exact(QFlags flags) {
@@ -138,7 +140,8 @@ void QueueMultiplex::setup(vk::Device device) {
 	}
 	m_familyCount = (u32)families.size();
 	m_queueCount = (u32)queues.size();
-	logD("[{}] Multiplexing [{}] Vulkan queue(s) from [{}] queue families for [Graphics/Present, Transfer]", g_name, m_queueCount, m_familyCount);
+	g_log.log(lvl::info, 1, "[{}] Multiplexing [{}] Vulkan queue(s) from [{}] queue families for [Graphics/Present, Transfer]", g_name, m_queueCount,
+			  m_familyCount);
 }
 
 std::vector<u32> QueueMultiplex::familyIndices(QFlags flags) const {

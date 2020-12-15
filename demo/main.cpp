@@ -78,6 +78,7 @@ int main(int argc, char** argv) {
 		winInfo.config.title = "levk demo";
 		winInfo.config.size = {1280, 720};
 		winInfo.options.bCentreCursor = true;
+		winInfo.options.verbosity = LibLogger::Verbosity::eLibrary;
 		window::DesktopInstance winst(winInfo);
 		auto makeSurface = [&winst](vk::Instance instance) -> vk::SurfaceKHR {
 			vk::SurfaceKHR surface;
@@ -89,6 +90,7 @@ int main(int argc, char** argv) {
 		bootInfo.instance.bValidation = levk_debug;
 		bootInfo.instance.validationLog = dl::level::info;
 		bootInfo.device.bPrintAvailable = true;
+		bootInfo.logVerbosity = LibLogger::Verbosity::eLibrary;
 		// bootInfo.device.qselect = graphics::Device::QSelect::eSingleFamily;
 		graphics::Bootstrap boot(bootInfo, makeSurface, winst.framebufferSize());
 		boot.vram.m_bLogAllocs = true;

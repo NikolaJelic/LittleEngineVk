@@ -99,12 +99,20 @@ struct SwapchainCreateInfo {
 
 void setFlags(Swapchain::Flags& out_flags, vk::Result result) {
 	switch (result) {
-	case vk::Result::eSuboptimalKHR:
+	case vk::Result::eSuboptimalKHR: {
+		if (!out_flags.test(Swapchain::Flag::eSuboptimal)) {
+			g_log.log(lvl::debug, 0, "[{}] Vulkan swapchain is suboptimal", g_name);
+		}
 		out_flags.set(Swapchain::Flag::eSuboptimal);
 		break;
-	case vk::Result::eErrorOutOfDateKHR:
+	}
+	case vk::Result::eErrorOutOfDateKHR: {
+		if (!out_flags.test(Swapchain::Flag::eOutOfDate)) {
+			g_log.log(lvl::debug, 0, "[{}] Vulkan swapchain is out of date", g_name);
+		}
 		out_flags.set(Swapchain::Flag::eOutOfDate);
 		break;
+	}
 	default:
 		break;
 	}
@@ -130,11 +138,13 @@ Swapchain::Swapchain(VRAM& vram, CreateInfo const& info, glm::ivec2 framebufferS
 	makeRenderPass();
 	auto const extent = m_storage.current.extent;
 	auto const mode = presentModeName(m_metadata.presentMode);
-	logD("[{}] Vulkan swapchain constructed [{}x{}] [{}]", g_name, extent.width, extent.height, mode);
+	g_log.log(lvl::info, 1, "[{}] Vulkan swapchain constructed [{}x{}] [{}]", g_name, extent.width, extent.height, mode);
 }
 
 Swapchain::~Swapchain() {
-	logD_if(!default_v(m_storage.swapchain), "[{}] Vulkan swapchain destroyed", g_name);
+	if (!default_v(m_storage.swapchain)) {
+		g_log.log(lvl::info, 1, "[{}] Vulkan swapchain destroyed", g_name);
+	}
 	destroy(m_storage, true);
 }
 
@@ -149,11 +159,11 @@ std::optional<RenderTarget> Swapchain::acquireNextImage(vk::Semaphore setDrawRea
 		setFlags(m_storage.flags, acquire->result);
 	} catch (vk::OutOfDateKHRError const& e) {
 		m_storage.flags.set(Flag::eOutOfDate);
-		logD("[{}] Swapchain failed to acquire next image [{}]", g_name, e.what());
+		g_log.log(lvl::warning, 1, "[{}] Swapchain failed to acquire next image [{}]", g_name, e.what());
 		return std::nullopt;
 	}
 	if (!acquire || (acquire->result != vk::Result::eSuccess && acquire->result != vk::Result::eSuboptimalKHR)) {
-		logD("[{}] Swapchain failed to acquire next image [{}]", g_name, acquire ? g_vkResultStr[acquire->result] : "Unknown Error");
+		g_log.log(lvl::warning, 1, "[{}] Swapchain failed to acquire next image [{}]", g_name, acquire ? g_vkResultStr[acquire->result] : "Unknown Error");
 		return std::nullopt;
 	}
 	m_storage.imageIndex = (u32)acquire->value;
@@ -163,7 +173,6 @@ std::optional<RenderTarget> Swapchain::acquireNextImage(vk::Semaphore setDrawRea
 }
 
 bool Swapchain::present(vk::Semaphore drawWait, vk::Fence onDrawn) {
-	orientCheck();
 	if (m_storage.flags.any(Flag::ePaused | Flag::eOutOfDate)) {
 		return false;
 	}
@@ -179,16 +188,17 @@ bool Swapchain::present(vk::Semaphore drawWait, vk::Fence onDrawn) {
 	try {
 		result = m_device.get().m_queues.present(presentInfo, false);
 	} catch (vk::OutOfDateKHRError const& e) {
-		logD("[{}] Swapchain Failed to present image [{}]", g_name, e.what());
+		g_log.log(lvl::warning, 1, "[{}] Swapchain Failed to present image [{}]", g_name, e.what());
 		m_storage.flags.set(Flag::eOutOfDate);
 		return false;
 	}
 	setFlags(m_storage.flags, result);
 	if (result != vk::Result::eSuccess && result != vk::Result::eSuboptimalKHR) {
-		logD("[{}] Swapchain Failed to present image [{}]", g_name, g_vkResultStr[result]);
+		g_log.log(lvl::warning, 1, "[{}] Swapchain Failed to present image [{}]", g_name, g_vkResultStr[result]);
 		return false;
 	}
 	frame.drawn = onDrawn;
+	orientCheck(); // Must submit acquired image, so skipping extent check here
 	return true;
 }
 
@@ -201,9 +211,13 @@ bool Swapchain::reconstruct(glm::ivec2 framebufferSize, Span<vk::PresentModeKHR>
 	bool const bResult = construct(framebufferSize);
 	auto const extent = m_storage.current.extent;
 	auto const mode = presentModeName(m_metadata.presentMode);
-	logD_if(bResult, "[{}] Vulkan swapchain reconstructed [{}x{}] [{}]", g_name, extent.width, extent.height, mode);
+	if (bResult) {
+		g_log.log(lvl::info, 1, "[{}] Vulkan swapchain reconstructed [{}x{}] [{}]", g_name, extent.width, extent.height, mode);
+	} else if (!m_storage.flags.test(Flag::ePaused)) {
+		g_log.log(lvl::error, 1, "[{}] Vulkan swapchain reconstruction failed!", g_name);
+	}
 	destroy(retired, false);
-	logW_if(!bResult && !m_storage.flags.test(Flag::ePaused), "[{}] Vulkan swapchain reconstruction failed!", g_name);
+
 	return bResult;
 }
 
@@ -358,6 +372,9 @@ void Swapchain::orientCheck() {
 			m_storage.flags[Flag::eRotated] = c == vkst::eIdentity || c == vkst::eRotate180;
 		}
 		m_storage.current.transform = capabilities.currentTransform;
+	}
+	if (capabilities.currentExtent != maths::max<u32>() && capabilities.currentExtent != m_storage.current.extent) {
+		m_storage.flags.set(Flag::eOutOfDate);
 	}
 }
 } // namespace le::graphics

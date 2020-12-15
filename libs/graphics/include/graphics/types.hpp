@@ -2,6 +2,7 @@
 #include <string_view>
 #include <unordered_map>
 #include <vk_mem_alloc.h>
+#include <core/lib_logger.hpp>
 #include <core/ref.hpp>
 #include <core/span.hpp>
 #include <core/std_types.hpp>
@@ -17,8 +18,10 @@ namespace le::graphics {
 
 enum class QType { eGraphics, ePresent, eTransfer, eCOUNT_ };
 using QFlags = kt::enum_flags<QType>;
+using lvl = dl::level;
 
 constexpr std::string_view g_name = "Graphics";
+inline LibLogger g_log;
 
 inline std::unordered_map<vk::Result, std::string_view> g_vkResultStr = {
 	{vk::Result::eErrorOutOfHostMemory, "OutOfHostMemory"},
