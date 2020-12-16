@@ -23,10 +23,13 @@ endif()
 
 # Options
 option(LEVK_USE_PCH "Generate pre-compiled header" ON)
-option(LEVK_USE_GLFW "Use GLFW for Windowing" ON)
 if(${PLATFORM} STREQUAL Android)
 	option(LEVK_VULKAN_DYNAMIC "Load Vulkan dynamically" ON)
+	set(LEVK_EDITOR OFF CACHE BOOL "" FORCE)
+	set(LEVK_USE_GLFW OFF CACHE BOOL "" FORCE)
+	set(LEVK_USE_IMGUI OFF CACHE BOOL "" FORCE)
 else()
+	option(LEVK_USE_GLFW "Use GLFW for Windowing" ON)
 	option(LEVK_VULKAN_DYNAMIC "Load Vulkan dynamically" OFF)
 	if("$CMAKE_BUILD_TYPE" STREQUAL "Debug")
 		option(LEVK_EDITOR "Enable Editor" ON)
@@ -54,6 +57,7 @@ if(PLATFORM STREQUAL Android)
 	endif()
 endif()
 if(LEVK_EDITOR)
+	set(LEVK_USE_IMGUI ON CACHE BOOL "" FORCE)
 	if(NOT LEVK_USE_GLFW OR NOT LEVK_USE_IMGUI)
 		message(FATAL_ERROR "Cannot build Editor without LEVK_USE_GLFW and LEVK_USE_IMGUI!")
 	endif()
@@ -172,11 +176,11 @@ if(LEVK_USE_PCH AND ${CMAKE_VERSION} VERSION_GREATER_EQUAL "3.17")
 	target_precompile_headers(${TARGET_NAME} 
 		PUBLIC
 			<deque>
-			<filesystem>
 			<string>
 			<unordered_map>
 			<vector>
 		PRIVATE
+			<vulkan/vulkan.hpp>
 			<vk_mem_alloc.h>
 			<stb/stb_image.h>
 			<tinyobjloader/tiny_obj_loader.h>

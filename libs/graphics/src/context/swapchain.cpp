@@ -349,14 +349,14 @@ void Swapchain::setFlags(vk::Result result) {
 	switch (result) {
 	case vk::Result::eSuboptimalKHR: {
 		if (!m_storage.flags.test(Swapchain::Flag::eSuboptimal)) {
-			g_log.log(lvl::debug, 0, "[{}] Vulkan swapchain is suboptimal", g_name);
+			g_log.log(lvl::debug, 2, "[{}] Vulkan swapchain is suboptimal", g_name);
 		}
 		m_storage.flags.set(Swapchain::Flag::eSuboptimal);
 		break;
 	}
 	case vk::Result::eErrorOutOfDateKHR: {
 		if (!m_storage.flags.test(Swapchain::Flag::eOutOfDate)) {
-			g_log.log(lvl::debug, 0, "[{}] Vulkan swapchain is out of date", g_name);
+			g_log.log(lvl::debug, 2, "[{}] Vulkan swapchain is out of date", g_name);
 		}
 		m_storage.flags.set(Swapchain::Flag::eOutOfDate);
 		break;

@@ -8,17 +8,6 @@
 
 namespace le::graphics {
 namespace {
-void listDevices(Span<PhysicalDevice> devices) {
-	std::stringstream str;
-	str << "\nAvailable GPUs:";
-	std::size_t idx = 0;
-	for (auto const& device : devices) {
-		str << " [" << idx << "] " << device.name() << '\t';
-	}
-	str << "\n\n";
-	std::cout << str.str();
-}
-
 template <typename T, typename U>
 T const* fromNextChain(U* pNext, vk::StructureType type) {
 	if (pNext) {
@@ -51,12 +40,9 @@ Device::Device(Instance& instance, vk::SurfaceKHR surface, CreateInfo const& inf
 		g_log.log(lvl::error, 0, "[{}] No compatible Vulkan physical device detected!", g_name);
 		throw std::runtime_error("No physical devices");
 	}
-	if (info.bPrintAvailable) {
-		listDevices(devices);
-	}
 	static DevicePicker const s_picker;
 	DevicePicker const* pPicker = info.pPicker ? info.pPicker : &s_picker;
-	PhysicalDevice picked = pPicker->pick(devices);
+	PhysicalDevice picked = pPicker->pick(devices, info.pickOverride);
 	if (default_v(picked.device)) {
 		throw std::runtime_error("Failed to select a physical device!");
 	}
@@ -111,7 +97,7 @@ Device::Device(Instance& instance, vk::SurfaceKHR surface, CreateInfo const& inf
 	m_device = m_physicalDevice.device.createDevice(deviceCreateInfo);
 	m_queues.setup(m_device);
 	instance.m_loader.init(m_device);
-	g_log.log(lvl::info, 2, "[{}] Vulkan device constructed, using GPU {}", g_name, m_physicalDevice.name());
+	g_log.log(lvl::info, 0, "[{}] Vulkan device constructed, using GPU {}", g_name, m_physicalDevice.toString());
 	g_validationLevel = validationLevel;
 }
 

@@ -70,8 +70,8 @@ class Device final {
 struct Device::CreateInfo {
 	Span<std::string_view> extensions = requiredExtensions;
 	DevicePicker* pPicker = nullptr;
+	std::optional<std::size_t> pickOverride;
 	QSelect qselect = QSelect::eOptimal;
-	bool bPrintAvailable = false;
 };
 
 // impl

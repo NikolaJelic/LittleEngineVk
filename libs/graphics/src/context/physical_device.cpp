@@ -1,4 +1,5 @@
 #include <map>
+#include <sstream>
 #include <graphics/context/physical_device.hpp>
 
 namespace le::graphics {
@@ -10,8 +11,19 @@ vk::SurfaceCapabilitiesKHR PhysicalDevice::surfaceCapabilities(vk::SurfaceKHR su
 	return !default_v(device) ? device.getSurfaceCapabilitiesKHR(surface) : vk::SurfaceCapabilitiesKHR();
 }
 
-PhysicalDevice DevicePicker::pick(Span<PhysicalDevice> devices) const {
+std::string PhysicalDevice::toString() const {
+	std::stringstream str;
+	str << *this;
+	return str.str();
+}
+
+PhysicalDevice DevicePicker::pick(Span<PhysicalDevice> devices, std::optional<std::size_t> indexOverride) const {
 	ENSURE(!devices.empty(), "No devices to pick from");
+	if (indexOverride && *indexOverride < devices.size()) {
+		auto const& ret = devices[*indexOverride];
+		g_log.log(lvl::info, 0, "[{}] Device selection overridden: [{}] {}", g_name, *indexOverride, ret.toString());
+		return ret;
+	}
 	using DevList = std::vector<Ref<PhysicalDevice const>>;
 	std::map<Score, DevList, std::greater<Score>> deviceMap;
 	for (auto const& device : devices) {

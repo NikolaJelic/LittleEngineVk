@@ -211,6 +211,20 @@ void utils::release(RawImage rawImage) {
 	}
 }
 
+std::vector<bytearray> utils::loadCubemap(io::Reader& reader, io::Path const& prefix, std::string_view ext, CubeImageIDs const& ids) {
+	std::vector<bytearray> ret;
+	for (std::string_view id : ids) {
+		io::Path const name = io::Path(id) + ext;
+		io::Path const path = prefix / name;
+		if (auto bytes = reader.bytes(path)) {
+			ret.push_back(std::move(*bytes));
+		} else {
+			g_log.log(lvl::warning, 0, "[{}] Failed to load bytes from [{}]", g_name, path.generic_string());
+		}
+	}
+	return ret;
+}
+
 std::vector<QueueFamily> utils::queueFamilies(PhysicalDevice const& device, vk::SurfaceKHR surface) {
 	using vkqf = vk::QueueFlagBits;
 	std::vector<QueueFamily> ret;

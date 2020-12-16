@@ -50,11 +50,211 @@ static void poll(Flags& out_flags, window::EventQueue queue) {
 	}
 }
 
-graphics::Bootstrap* g_boot;
-graphics::RenderContext* g_context;
+struct GPULister : os::ICmdArg {
+	inline static constexpr std::array names = {"gpu-list"sv, "list-gpus"sv};
+
+	Span<std::string_view> keyVariants() const override {
+		return names;
+	}
+
+	bool halt(std::string_view) override {
+		graphics::g_log.minVerbosity = LibLogger::Verbosity::eEndUser;
+		graphics::Instance inst(graphics::Instance::CreateInfo{});
+		std::stringstream str;
+		str << "Available GPUs:\n";
+		int i = 0;
+		for (auto const& d : inst.availableDevices(graphics::Device::requiredExtensions)) {
+			str << '\t' << i++ << ". " << d << "\n";
+		}
+		str << "\n";
+		std::cout << str.str();
+		return true;
+	}
+
+	Usage usage() const override {
+		return {"", "List supported GPUs"};
+	}
+};
+
+struct GPUPicker : os::ICmdArg {
+	inline static constexpr std::array names = {"use-gpu"sv, "pick-gpu"sv};
+
+	inline static std::optional<std::size_t> s_picked;
+
+	Span<std::string_view> keyVariants() const override {
+		return names;
+	}
+
+	bool halt(std::string_view params) override {
+		s32 idx = utils::strings::toS32(params, -1);
+		if (idx >= 0) {
+			s_picked = (std::size_t)idx;
+			logD("Using custom GPU index: {}", idx);
+		}
+		return false;
+	}
+
+	Usage usage() const override {
+		return {"<0-...>", "Select a custom available GPU"};
+	}
+};
+
+void listCmdArgs();
+
+struct HelpCmd : os::ICmdArg {
+	inline static constexpr std::array names = {"h"sv, "help"sv};
+
+	Span<std::string_view> keyVariants() const override {
+		return names;
+	}
+
+	bool halt(std::string_view) override {
+		listCmdArgs();
+		return true;
+	}
+
+	Usage usage() const override {
+		return {"", "List all command line arguments"};
+	}
+};
+
+struct Sets {
+	std::unordered_map<u32, graphics::SetFactory> sets;
+
+	void make(Span<u32> setNumbers, graphics::Pipeline const& pipe) {
+		for (u32 num : setNumbers) {
+			sets.emplace(num, pipe.makeSetFactory(num));
+		}
+	}
+
+	graphics::SetFactory& operator[](u32 set) {
+		if (auto it = sets.find(set); it != sets.end()) {
+			return it->second;
+		}
+		ENSURE(false, "Nonexistent set");
+		throw std::runtime_error("Nonexistent set");
+	}
+
+	void swap() {
+		for (auto& [_, set] : sets) {
+			set.swap();
+		}
+	}
+};
+
+struct SetLayouts {
+	std::unordered_map<Hash, Sets> sets;
+
+	void make(Hash layout, Span<u32> setNumbers, graphics::Pipeline const& pipe) {
+		sets[layout].make(setNumbers, pipe);
+	}
+
+	Sets& operator[](Hash hash) {
+		if (auto it = sets.find(hash); it != sets.end()) {
+			return it->second;
+		}
+		ENSURE(false, "Nonexistent layout");
+		throw std::runtime_error("Nonexistent layout");
+	}
+
+	void swap() {
+		for (auto& [_, s] : sets) {
+			s.swap();
+		}
+	}
+};
+
+struct Material {
+	virtual void write(graphics::DescriptorSet&) {
+	}
+	virtual void bind(graphics::CommandBuffer&, graphics::Pipeline const&, graphics::DescriptorSet const&) const {
+	}
+};
+
+struct TexturedMaterial : Material {
+	CView<graphics::Texture> diffuse;
+	u32 binding = 0;
+
+	void write(graphics::DescriptorSet& ds) override {
+		ENSURE(diffuse, "Null pipeline/texture view");
+		ds.updateTextures(binding, *diffuse);
+	}
+	void bind(graphics::CommandBuffer& cb, graphics::Pipeline const& pi, graphics::DescriptorSet const& ds) const override {
+		ENSURE(diffuse, "Null texture view");
+		cb.bindSets(pi.layout(), ds.get(), ds.setNumber());
+	}
+};
+
+struct Prop2 {
+	Ref<Transform> transform;
+	Ref<graphics::Mesh> mesh;
+	Ref<Material> material;
+};
+
+struct VP {
+	glm::mat4 mat_p;
+	glm::mat4 mat_v;
+};
+
+struct Skybox {
+	CView<graphics::Mesh> mesh;
+	CView<graphics::Texture> cubemap;
+
+	bool ready() const {
+		return cubemap && cubemap->ready();
+	}
+	void update(graphics::DescriptorSet& set, CView<graphics::Buffer> vp) const {
+		if (ready()) {
+			set.updateBuffers(0, vp, sizeof(VP));
+			set.updateTextures(1, *cubemap);
+		}
+	}
+	void draw(graphics::CommandBuffer& cb, graphics::Pipeline const& pi, graphics::DescriptorSet const& set) {
+		if (ready()) {
+			cb.bindPipe(pi);
+			cb.bindSets(pi.layout(), set.get(), set.setNumber());
+			cb.bindVBO(mesh->vbo().buffer, mesh->ibo().buffer);
+			cb.drawIndexed(mesh->ibo().count);
+		}
+	}
+};
+struct Scene {
+	Skybox skybox;
+	std::unordered_map<Ref<graphics::Pipeline>, std::vector<Prop2>> props;
+};
+
+GPULister g_gpuLister;
+GPUPicker g_gpuPicker;
+HelpCmd g_help;
+std::array<Ref<os::ICmdArg>, 3> const g_cmdArgs = {g_gpuLister, g_gpuPicker, g_help};
+
+void listCmdArgs() {
+	std::stringstream str;
+	for (os::ICmdArg const& arg : g_cmdArgs) {
+		str << '[';
+		bool bFirst = true;
+		for (auto key : arg.keyVariants()) {
+			if (!bFirst) {
+				str << ", ";
+			}
+			bFirst = false;
+			str << (key.length() == 1 ? "-"sv : "--"sv) << key;
+		}
+		auto const u = arg.usage();
+		if (!u.params.empty()) {
+			str << '=' << u.params;
+		}
+		str << "] : " << u.summary << '\n';
+	}
+	std::cout << str.str();
+}
 
 int main(int argc, char** argv) {
 	try {
+		os::args({argc, argv});
+		if (os::halt(g_cmdArgs)) {
+			return 0;
+		}
 		io::FileReader reader;
 		io::Path const prefix = os::dirPath(os::Dir::eWorking) / "data";
 		reader.mount(prefix);
@@ -67,13 +267,13 @@ int main(int argc, char** argv) {
 		auto vert = reader.bytes("shaders/uber.vert.spv");
 		auto frag = reader.bytes("shaders/uber.frag.spv");
 		auto tex0 = reader.bytes("textures/container2.png");
-		std::vector<bytearray> cubemap;
-		cubemap.push_back(*reader.bytes("skyboxes/sky_dusk/right.jpg"));
-		cubemap.push_back(*reader.bytes("skyboxes/sky_dusk/left.jpg"));
-		cubemap.push_back(*reader.bytes("skyboxes/sky_dusk/up.jpg"));
-		cubemap.push_back(*reader.bytes("skyboxes/sky_dusk/down.jpg"));
-		cubemap.push_back(*reader.bytes("skyboxes/sky_dusk/front.jpg"));
-		cubemap.push_back(*reader.bytes("skyboxes/sky_dusk/back.jpg"));
+		auto const cubemap = graphics::utils::loadCubemap(reader, "skyboxes/sky_dusk");
+		// cubemap.push_back(*reader.bytes("skyboxes/sky_dusk/right.jpg"));
+		// cubemap.push_back(*reader.bytes("skyboxes/sky_dusk/left.jpg"));
+		// cubemap.push_back(*reader.bytes("skyboxes/sky_dusk/up.jpg"));
+		// cubemap.push_back(*reader.bytes("skyboxes/sky_dusk/down.jpg"));
+		// cubemap.push_back(*reader.bytes("skyboxes/sky_dusk/front.jpg"));
+		// cubemap.push_back(*reader.bytes("skyboxes/sky_dusk/back.jpg"));
 		window::CreateInfo winInfo;
 		winInfo.config.title = "levk demo";
 		winInfo.config.size = {1280, 720};
@@ -89,8 +289,8 @@ int main(int argc, char** argv) {
 		bootInfo.instance.extensions = winst.vkInstanceExtensions();
 		bootInfo.instance.bValidation = levk_debug;
 		bootInfo.instance.validationLog = dl::level::info;
-		bootInfo.device.bPrintAvailable = true;
 		bootInfo.logVerbosity = LibLogger::Verbosity::eLibrary;
+		bootInfo.device.pickOverride = GPUPicker::s_picked;
 		// bootInfo.device.qselect = graphics::Device::QSelect::eSingleFamily;
 		graphics::Bootstrap boot(bootInfo, makeSurface, winst.framebufferSize());
 		boot.vram.m_bLogAllocs = true;
@@ -105,10 +305,6 @@ int main(int argc, char** argv) {
 			graphics::Geometry gcube = graphics::makeCube(0.5f);
 			auto const skyCubeI = gcube.indices;
 			auto const skyCubeV = gcube.positions();
-			struct VP {
-				glm::mat4 mat_p;
-				glm::mat4 mat_v;
-			};
 			VP vp = {glm::perspective(glm::radians(45.0f), 1280.0f / 720.0f, 0.1f, 100.0f), glm::lookAt({1.0f, 1.0f, 1.0f}, {}, graphics::g_nUp)};
 			graphics::Mesh mesh0("cube", boot.vram, graphics::Mesh::Type::eStatic);
 			graphics::Mesh mesh1("cone", boot.vram, graphics::Mesh::Type::eStatic);
@@ -140,50 +336,7 @@ int main(int argc, char** argv) {
 			auto sskybox = graphics::Shader(boot.device, {*reader.bytes(*skyV), *reader.bytes(*skyF)});
 			auto pipe = context.makePipeline("test", context.pipeInfo(test));
 			auto pipeTex = context.makePipeline("test_tex", context.pipeInfo(testTex));
-			struct Sets {
-				std::unordered_map<u32, graphics::SetFactory> sets;
 
-				void make(Span<u32> setNumbers, graphics::Pipeline const& pipe) {
-					for (u32 num : setNumbers) {
-						sets.emplace(num, pipe.makeSetFactory(num));
-					}
-				}
-
-				graphics::SetFactory& operator[](u32 set) {
-					if (auto it = sets.find(set); it != sets.end()) {
-						return it->second;
-					}
-					ENSURE(false, "Nonexistent set");
-					throw std::runtime_error("Nonexistent set");
-				}
-
-				void swap() {
-					for (auto& [_, set] : sets) {
-						set.swap();
-					}
-				}
-			};
-			struct SetLayouts {
-				std::unordered_map<Hash, Sets> sets;
-
-				void make(Hash layout, Span<u32> setNumbers, graphics::Pipeline const& pipe) {
-					sets[layout].make(setNumbers, pipe);
-				}
-
-				Sets& operator[](Hash hash) {
-					if (auto it = sets.find(hash); it != sets.end()) {
-						return it->second;
-					}
-					ENSURE(false, "Nonexistent layout");
-					throw std::runtime_error("Nonexistent layout");
-				}
-
-				void swap() {
-					for (auto& [_, s] : sets) {
-						s.swap();
-					}
-				}
-			};
 			SetLayouts layouts;
 			std::array const setNums = {0U, 1U, 2U};
 			layouts.make("main", setNums, pipeTex);
@@ -200,6 +353,7 @@ int main(int argc, char** argv) {
 			tr[1].position({-5.0f, -1.0f, -2.0f});
 			tr[2].position({0.0f, -2.0f, -3.0f});
 			time::Point t = time::now();
+			glm::vec3 camPos = {0.0f, 2.0f, 4.0f};
 			while (true) {
 				Time_s dt = time::now() - t;
 				t = time::now();
@@ -224,70 +378,24 @@ int main(int argc, char** argv) {
 				threads::sleep(5ms);
 				auto const fb = winst.framebufferSize();
 				vp.mat_p = glm::perspective(glm::radians(45.0f), (f32)fb.x / std::max((f32)fb.y, 1.0f), 0.1f, 100.0f);
-				tr[0].rotate(glm::radians(-180.0f) * dt.count(), graphics::g_nUp);
+				tr[0].rotate(glm::radians(-180.0f) * dt.count(), glm::normalize(glm::vec3(1.0f)));
 				tr[1].rotate(glm::radians(360.0f) * dt.count(), graphics::g_nUp);
+				// camera
+				{
+					glm::vec3 const moveDir = glm::normalize(glm::cross(camPos, graphics::g_nUp));
+					camPos += moveDir * dt.count() * 0.75f;
+					vp.mat_v = glm::lookAt(camPos, {}, graphics::g_nUp);
+				}
 
-				struct Material {
-					virtual void write(graphics::DescriptorSet&) {
-					}
-					virtual void bind(graphics::CommandBuffer&, graphics::Pipeline const&, graphics::DescriptorSet const&) const {
-					}
-				};
-
-				struct TexturedMaterial : Material {
-					CView<graphics::Texture> diffuse;
-					u32 binding = 0;
-
-					void write(graphics::DescriptorSet& ds) override {
-						ENSURE(diffuse, "Null pipeline/texture view");
-						ds.updateTextures(binding, *diffuse);
-					}
-					void bind(graphics::CommandBuffer& cb, graphics::Pipeline const& pi, graphics::DescriptorSet const& ds) const override {
-						ENSURE(diffuse, "Null texture view");
-						cb.bindSets(pi.layout(), ds.get(), ds.setNumber());
-					}
-				};
-
-				struct Prop {
-					Ref<Transform> transform;
-					Ref<graphics::Mesh> mesh;
-					Ref<Material> material;
-				};
-				struct Skybox {
-					CView<graphics::Mesh> mesh;
-					CView<graphics::Texture> cubemap;
-
-					bool ready() const {
-						return cubemap && cubemap->ready();
-					}
-					void update(graphics::DescriptorSet& set, CView<graphics::Buffer> vp) const {
-						if (ready()) {
-							set.updateBuffers(0, vp, sizeof(VP));
-							set.updateTextures(1, *cubemap);
-						}
-					}
-					void draw(graphics::CommandBuffer& cb, graphics::Pipeline const& pi, graphics::DescriptorSet const& set) {
-						if (ready()) {
-							cb.bindPipe(pi);
-							cb.bindSets(pi.layout(), set.get(), set.setNumber());
-							cb.bindVBO(mesh->vbo().buffer, mesh->ibo().buffer);
-							cb.drawIndexed(mesh->ibo().count);
-						}
-					}
-				};
-				struct Scene {
-					Skybox skybox;
-					std::unordered_map<Ref<graphics::Pipeline>, std::vector<Prop>> props;
-				};
 				TexturedMaterial texMat;
 				texMat.diffuse = texC;
 				Material mat;
 				Scene scene;
 				scene.skybox.mesh = skyCube;
 				scene.skybox.cubemap = sky;
-				scene.props[*pipeTex].push_back(Prop{tr[0], mesh0, texMat});
-				scene.props[*pipe].push_back(Prop{tr[1], mesh0, mat});
-				scene.props[*pipe].push_back(Prop{tr[2], mesh1, mat});
+				scene.props[*pipeTex].push_back(Prop2{tr[0], mesh0, texMat});
+				scene.props[*pipe].push_back(Prop2{tr[1], mesh0, mat});
+				scene.props[*pipe].push_back(Prop2{tr[2], mesh1, mat});
 
 				// render
 				if (context.waitForFrame()) {

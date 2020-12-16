@@ -18,7 +18,7 @@ class Selector {
 		bool const valid = found.all(QFlags::inverse());
 		ENSURE(valid, "Required queues not present");
 		if (!valid) {
-			g_log.log(lvl::error, 2, "[{}] Required Vulkan Queues not present on selected physical device!");
+			g_log.log(lvl::error, 0, "[{}] Required Vulkan Queues not present on selected physical device!");
 		}
 	}
 

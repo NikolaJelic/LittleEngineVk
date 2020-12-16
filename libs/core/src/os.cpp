@@ -87,11 +87,24 @@ std::deque<os::ArgsParser::entry> const& os::args() noexcept {
 	return g_args;
 }
 
+bool os::halt(Span<Ref<ICmdArg>> cmdArgs) {
+	for (auto const& entry : g_args) {
+		for (ICmdArg& cmdArg : cmdArgs) {
+			auto const matches = cmdArg.keyVariants();
+			bool const bMatch = std::any_of(matches.begin(), matches.end(), [&entry](std::string_view m) { return entry.k == m; });
+			if (bMatch && cmdArg.halt(entry.v)) {
+				return true;
+			}
+		}
+	}
+	return false;
+}
+
 bool os::isDebuggerAttached() {
 	bool ret = false;
 #if defined(LEVK_OS_WINDOWS)
 	ret = IsDebuggerPresent() != 0;
-#elif defined(LEVK_OS_LINUX)
+#elif defined(LEVK_OS_LINUX) || defined(LEVK_OS_ANDROID)
 	char buf[4096];
 	auto const status_fd = ::open("/proc/self/status", O_RDONLY);
 	if (status_fd == -1) {

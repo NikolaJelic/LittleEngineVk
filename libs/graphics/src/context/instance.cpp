@@ -30,7 +30,7 @@ VKAPI_ATTR vk::Bool32 VKAPI_CALL validationCallback(VkDebugUtilsMessageSeverityF
 	static constexpr std::string_view name = "vk::validation";
 	switch (messageSeverity) {
 	case VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT:
-		g_log.log(lvl::error, 2, "[{}] {}", name, VK_LOG_MSG);
+		g_log.log(lvl::error, 0, "[{}] {}", name, VK_LOG_MSG);
 		ENSURE(false, VK_LOG_MSG);
 		return true;
 	case VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT:
@@ -46,7 +46,7 @@ VKAPI_ATTR vk::Bool32 VKAPI_CALL validationCallback(VkDebugUtilsMessageSeverityF
 		break;
 	case VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT:
 		if (g_validationLevel <= dl::level::debug) {
-			g_log.log(lvl::debug, 0, "[{}] {}", name, VK_LOG_MSG);
+			g_log.log(lvl::debug, 2, "[{}] {}", name, VK_LOG_MSG);
 		}
 		break;
 	}

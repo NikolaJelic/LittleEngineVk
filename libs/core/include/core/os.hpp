@@ -5,6 +5,8 @@
 #include <fmt/format.h>
 #include <core/erased_ref.hpp>
 #include <core/io/path.hpp>
+#include <core/ref.hpp>
+#include <core/span.hpp>
 #include <core/std_types.hpp>
 #include <kt/args_parser/args_parser.hpp>
 
@@ -113,6 +115,33 @@ struct Args {
 using ArgsParser = kt::args_parser<>;
 
 ///
+/// \brief Interface representing a command line argument
+///
+struct ICmdArg {
+	///
+	/// \brief Data structure describing a command's usage
+	///
+	struct Usage {
+		std::string_view params;
+		std::string_view summary;
+	};
+
+	virtual ~ICmdArg() = default;
+	///
+	/// \brief Must return the possible keys to match against
+	///
+	virtual Span<std::string_view> keyVariants() const = 0;
+	///
+	/// \brief Must return true to stop processing
+	///
+	virtual bool halt(std::string_view value) = 0;
+	///
+	/// \brief Must return valid Usage
+	///
+	virtual Usage usage() const = 0;
+};
+
+///
 /// \brief RAII wrapper for OS service
 /// Destructor joins all running threads
 ///
@@ -143,6 +172,10 @@ std::deque<ArgsParser::entry> const& args() noexcept;
 ///
 template <typename Arg, typename... Args>
 std::optional<std::string_view> isDefined(Arg&& key, Args&&... variants) noexcept;
+///
+/// \brief Check if any passed ICmdArg requests to halt
+///
+bool halt(Span<Ref<ICmdArg>> cmdArgs);
 
 ///
 /// \brief Check if a debugger is attached to the runtime

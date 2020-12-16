@@ -126,17 +126,18 @@ Path& Path::concat(Path const& rhs) {
 		m_units.pop_back();
 	}
 	std::string ext;
-	if (rhs.m_units.back()[0] == '.') {
-		ext = std::move(rhs.m_units.back());
+	auto units = rhs.m_units;
+	if (units.back()[0] == '.') {
+		ext = std::move(units.back());
 	}
-	auto squash = rhs.m_units.front();
+	auto squash = units.front();
 	while (!squash.empty() && squash[0] == '/') {
 		squash = squash.substr(1);
 	}
 	m_units.back() += std::move(squash);
-	std::size_t const end = ext.empty() ? rhs.m_units.size() : rhs.m_units.size() - 1;
+	std::size_t const end = ext.empty() ? units.size() : units.size() - 1;
 	for (std::size_t idx = 1; idx < end; ++idx) {
-		std::string const& unit = rhs.m_units[idx];
+		std::string const& unit = units[idx];
 		if (unit[0] == '.') {
 			m_units.back() += unit;
 		} else {

@@ -23,6 +23,19 @@ struct PhysicalDevice final {
 
 	bool surfaceSupport(u32 queueFamily, vk::SurfaceKHR surface) const;
 	vk::SurfaceCapabilitiesKHR surfaceCapabilities(vk::SurfaceKHR surface) const;
+	std::string toString() const;
+
+	friend std::ostream& operator<<(std::ostream& out, PhysicalDevice const& device) {
+		static constexpr std::string_view discrete = " (Discrete)";
+		static constexpr std::string_view integrated = " (Integrated)";
+		out << device.name();
+		if (device.discreteGPU()) {
+			out << discrete;
+		} else if (device.integratedGPU()) {
+			out << integrated;
+		}
+		return out;
+	}
 };
 
 class DevicePicker {
@@ -38,7 +51,7 @@ class DevicePicker {
 		}
 	}
 
-	PhysicalDevice pick(Span<PhysicalDevice> devices) const;
+	PhysicalDevice pick(Span<PhysicalDevice> devices, std::optional<std::size_t> indexOverride) const;
 	Score score(PhysicalDevice const& device) const;
 
 	///

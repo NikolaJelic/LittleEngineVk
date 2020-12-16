@@ -1,6 +1,8 @@
 #pragma once
 #include <map>
+#include <core/io/reader.hpp>
 #include <core/os.hpp>
+#include <graphics/context/physical_device.hpp>
 #include <graphics/descriptor_set.hpp>
 #include <graphics/geometry.hpp>
 #include <graphics/shader.hpp>
@@ -36,6 +38,10 @@ bytearray convert(std::initializer_list<u8> bytes);
 bytearray convert(Span<u8> bytes);
 RawImage decompress(bytearray compressed, u8 channels = 4);
 void release(RawImage rawImage);
+
+using CubeImageIDs = std::array<std::string_view, 6>;
+constexpr CubeImageIDs cubeImageIDs = {"right", "left", "up", "down", "front", "back"};
+std::vector<bytearray> loadCubemap(io::Reader& reader, io::Path const& prefix, std::string_view ext = ".jpg", CubeImageIDs const& ids = cubeImageIDs);
 
 std::vector<QueueFamily> queueFamilies(PhysicalDevice const& device, vk::SurfaceKHR surface);
 } // namespace utils
