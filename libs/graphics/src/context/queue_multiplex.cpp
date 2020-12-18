@@ -84,6 +84,7 @@ QueueMultiplex::QCI createInfo(QueueFamily& out_family, Span<f32> prio) {
 		ENSURE(out_family.nextQueueIndex < out_family.total, "No queues remaining");
 		queue.arrayIndex = out_family.nextQueueIndex++;
 		queue.familyIndex = out_family.familyIndex;
+		queue.flags = out_family.flags;
 		ret.second.push_back(queue);
 	}
 	return ret;

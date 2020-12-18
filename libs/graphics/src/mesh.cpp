@@ -60,7 +60,7 @@ bool Mesh::ready() const {
 	return valid() && !busy();
 }
 
-void Mesh::wait() {
+void Mesh::wait() const {
 	if (m_type == Type::eDynamic) {
 		m_vram.get().wait({m_vbo.transfer, m_ibo.transfer});
 	}

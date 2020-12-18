@@ -64,11 +64,10 @@ VertexInputInfo RenderContext::vertexInput(QuickVertexInput const& info) {
 	binding.inputRate = vk::VertexInputRate::eVertex;
 	ret.bindings.push_back(binding);
 	u32 location = 0;
-	static std::vector<std::size_t> const single = {0};
-	for (auto const& offset : (info.offsets.empty() ? single : info.offsets)) {
+	for (auto const& [format, offset] : info.attributes) {
 		vk::VertexInputAttributeDescription attribute;
 		attribute.binding = info.binding;
-		attribute.format = vk::Format::eR32G32B32Sfloat;
+		attribute.format = format;
 		attribute.offset = (u32)offset;
 		attribute.location = location++;
 		ret.attributes.push_back(attribute);

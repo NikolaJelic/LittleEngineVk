@@ -29,7 +29,7 @@ class Texture {
 	bool valid() const;
 	bool busy() const;
 	bool ready() const;
-	void wait();
+	void wait() const;
 
 	Data const& data() const noexcept;
 
@@ -42,7 +42,7 @@ class Texture {
 			std::vector<Span<std::byte>> bytes;
 			std::vector<RawImage> imgs;
 		} raw;
-		VRAM::Future transfer;
+		mutable VRAM::Future transfer;
 	};
 	Storage m_storage;
 

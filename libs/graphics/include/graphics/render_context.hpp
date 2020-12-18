@@ -14,7 +14,7 @@ namespace le::graphics {
 struct QuickVertexInput;
 struct VertexInputCreateInfo;
 
-enum class PFlag { eDepthTest, eDepthWrite, eCOUNT_ };
+enum class PFlag { eDepthTest, eDepthWrite, eAlphaBlend, eCOUNT_ };
 using PFlags = kt::enum_flags<PFlag>;
 
 class RenderContext : NoCopy {
@@ -118,9 +118,14 @@ struct VertexInputCreateInfo {
 };
 
 struct QuickVertexInput {
+	struct Attribute {
+		vk::Format format = vk::Format::eR32G32B32Sfloat;
+		std::size_t offset = 0;
+	};
+
 	u32 binding = 0;
 	std::size_t size = 0;
-	std::vector<std::size_t> offsets;
+	std::vector<Attribute> attributes;
 };
 
 // impl
@@ -136,6 +141,17 @@ Pipeline::CreateInfo RenderContext::pipeInfo(Shader const& shader, PFlags flags)
 	}
 	if (flags.test(PFlag::eDepthWrite)) {
 		ret.fixedState.depthStencilState.depthWriteEnable = true;
+	}
+	if (flags.test(PFlag::eAlphaBlend)) {
+		using CCF = vk::ColorComponentFlagBits;
+		ret.fixedState.colorBlendAttachment.colorWriteMask = CCF::eR | CCF::eG | CCF::eB | CCF::eA;
+		ret.fixedState.colorBlendAttachment.blendEnable = true;
+		ret.fixedState.colorBlendAttachment.srcColorBlendFactor = vk::BlendFactor::eSrcAlpha;
+		ret.fixedState.colorBlendAttachment.dstColorBlendFactor = vk::BlendFactor::eOneMinusSrcAlpha;
+		ret.fixedState.colorBlendAttachment.colorBlendOp = vk::BlendOp::eAdd;
+		ret.fixedState.colorBlendAttachment.srcAlphaBlendFactor = vk::BlendFactor::eOne;
+		ret.fixedState.colorBlendAttachment.dstAlphaBlendFactor = vk::BlendFactor::eZero;
+		ret.fixedState.colorBlendAttachment.alphaBlendOp = vk::BlendOp::eAdd;
 	}
 	return ret;
 }

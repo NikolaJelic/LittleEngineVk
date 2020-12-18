@@ -21,7 +21,7 @@ View<Buffer> createStagingBuffer(Memory& memory, vk::DeviceSize size) {
 	info.vmaUsage = VMA_MEMORY_USAGE_CPU_ONLY;
 #if defined(LEVK_VKRESOURCE_NAMES)
 	static u64 s_nextBufferID = 0;
-	info.name = fmt::format("vram-staging-{}", s_nextBufferID++);
+	info.name = fmt::format("vram_staging/{}", s_nextBufferID++);
 #endif
 	return memory.construct(info);
 }

@@ -112,6 +112,7 @@ struct Image final : VkResource {
 	vk::Image image;
 	vk::DeviceSize allocatedSize = {};
 	vk::Extent3D extent = {};
+	u32 layerCount = 1;
 };
 
 struct RawImage {

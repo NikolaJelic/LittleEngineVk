@@ -9,4 +9,7 @@ layout(location = 0) out vec4 outColour;
 
 void main() {
 	outColour = fragColour * texture(diffuse, uv);
+	if (outColour.x < 0.1 && outColour.y < 0.1 && outColour.z < 0.1) {
+		outColour.a = 0.0;
+	}
 }

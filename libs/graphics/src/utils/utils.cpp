@@ -99,7 +99,10 @@ VertexInputInfo VertexInfoFactory<Vertex>::operator()(u32 binding) const {
 	QuickVertexInput qvi;
 	qvi.binding = binding;
 	qvi.size = sizeof(Vertex);
-	qvi.offsets = {0, offsetof(Vertex, colour), offsetof(Vertex, normal), offsetof(Vertex, texCoord)};
+	qvi.attributes = {{vk::Format::eR32G32B32Sfloat, offsetof(Vertex, position)},
+					  {vk::Format::eR32G32B32Sfloat, offsetof(Vertex, colour)},
+					  {vk::Format::eR32G32B32Sfloat, offsetof(Vertex, normal)},
+					  {vk::Format::eR32G32Sfloat, offsetof(Vertex, texCoord)}};
 	return RenderContext::vertexInput(qvi);
 }
 

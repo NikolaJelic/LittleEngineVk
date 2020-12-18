@@ -2,6 +2,7 @@
 #include <level.hpp>
 
 #include <core/index_view.hpp>
+#include <graphics/bitmap_text.hpp>
 #include <graphics/context/bootstrap.hpp>
 #include <graphics/geometry.hpp>
 #include <graphics/mesh.hpp>
@@ -191,9 +192,98 @@ struct Prop2 {
 	Ref<Material> material;
 };
 
+struct Font {
+	io::Path atlasID;
+	io::Path samplerID;
+	io::Path materialID;
+	std::optional<graphics::Texture> atlas;
+	std::array<graphics::Glyph, maths::max<u8>()> glyphs;
+
+	graphics::Glyph deserialise(u8 c, dj::object const& json) {
+		graphics::Glyph ret;
+		ret.ch = c;
+		ret.st = {(s32)json.value<dj::integer>("x"), (s32)json.value<dj::integer>("y")};
+		ret.uv = ret.cell = {(s32)json.value<dj::integer>("width"), (s32)json.value<dj::integer>("height")};
+		ret.offset = {(s32)json.value<dj::integer>("originX"), (s32)json.value<dj::integer>("originY")};
+		auto const pAdvance = json.find<dj::integer>("advance");
+		ret.xAdv = pAdvance ? (s32)pAdvance->value : ret.cell.x;
+		ret.orgSizePt = (s32)json.value<dj::integer>("size");
+		ret.bBlank = json.value<dj::boolean>("isBlank");
+		return ret;
+	}
+
+	void deserialise(dj::object const& json) {
+		if (auto pAtlas = json.find<dj::string>("sheetID")) {
+			atlasID = pAtlas->value;
+		}
+		if (auto pSampler = json.find<dj::string>("samplerID")) {
+			samplerID = pSampler->value;
+		}
+		if (auto pMaterial = json.find<dj::string>("materialID")) {
+			materialID = pMaterial->value;
+		}
+		if (auto pGlyphsData = json.find<dj::object>("glyphs")) {
+			for (auto& [key, value] : pGlyphsData->fields) {
+				if (!key.empty() && value->type() == dj::data_type::object) {
+					graphics::Glyph const glyph = deserialise((u8)key[0], *value->cast<dj::object>());
+					if (glyph.cell.x > 0 && glyph.cell.y > 0) {
+						glyphs[(std::size_t)glyph.ch] = glyph;
+					} else {
+						logW("Could not deserialise Glyph '{}'!", key[0]);
+					}
+				}
+			}
+		}
+	}
+
+	bool create(graphics::VRAM& vram, io::Reader const& reader, io::Path const& id, io::Path const& path, vk::Sampler sampler, vk::Format format) {
+		auto jsonText = reader.string(path);
+		if (!jsonText) {
+			return false;
+		}
+		dj::object json;
+		if (!json.read(*jsonText)) {
+			return false;
+		}
+		deserialise(json);
+		auto bytes = reader.bytes(path.parent_path() / atlasID);
+		if (!bytes) {
+			return false;
+		}
+		atlas = graphics::Texture((id / "atlas").generic_string(), vram);
+		graphics::Texture::CreateInfo info;
+		info.sampler = sampler;
+		info.data = graphics::Texture::Compressed{{*bytes}};
+		info.format = format;
+		if (!atlas->construct(info)) {
+			return false;
+		}
+		return true;
+	}
+};
+
+struct Text {
+	graphics::BitmapText text;
+	std::optional<graphics::Mesh> mesh;
+	glm::mat4 model = glm::mat4(1.0f);
+
+	void create(graphics::VRAM& vram, io::Path const& id) {
+		mesh = graphics::Mesh((id / "mesh").generic_string(), vram);
+	}
+
+	bool set(Font const& font, std::string_view str) {
+		text.text = str;
+		if (mesh) {
+			return mesh->construct(text.generate(font.glyphs, font.atlas->data().size));
+		}
+		return false;
+	}
+};
+
 struct VP {
 	glm::mat4 mat_p;
 	glm::mat4 mat_v;
+	glm::mat4 mat_ui;
 };
 
 struct Skybox {
@@ -260,6 +350,8 @@ int main(int argc, char** argv) {
 		reader.mount(prefix);
 		reader.mount(os::dirPath(os::Dir::eWorking) / "demo/data");
 		auto testV = graphics::utils::compileGlsl("shaders/test.vert", {}, prefix);
+		auto uiV = graphics::utils::compileGlsl("shaders/ui.vert", {}, prefix);
+		auto uiF = graphics::utils::compileGlsl("shaders/ui.frag", {}, prefix);
 		auto testF = graphics::utils::compileGlsl("shaders/test.frag", {}, prefix);
 		auto testFTex = graphics::utils::compileGlsl("shaders/test_tex.frag", {}, prefix);
 		auto skyV = graphics::utils::compileGlsl("shaders/skybox.vert", {}, prefix);
@@ -268,12 +360,6 @@ int main(int argc, char** argv) {
 		auto frag = reader.bytes("shaders/uber.frag.spv");
 		auto tex0 = reader.bytes("textures/container2.png");
 		auto const cubemap = graphics::utils::loadCubemap(reader, "skyboxes/sky_dusk");
-		// cubemap.push_back(*reader.bytes("skyboxes/sky_dusk/right.jpg"));
-		// cubemap.push_back(*reader.bytes("skyboxes/sky_dusk/left.jpg"));
-		// cubemap.push_back(*reader.bytes("skyboxes/sky_dusk/up.jpg"));
-		// cubemap.push_back(*reader.bytes("skyboxes/sky_dusk/down.jpg"));
-		// cubemap.push_back(*reader.bytes("skyboxes/sky_dusk/front.jpg"));
-		// cubemap.push_back(*reader.bytes("skyboxes/sky_dusk/back.jpg"));
 		window::CreateInfo winInfo;
 		winInfo.config.title = "levk demo";
 		winInfo.config.size = {1280, 720};
@@ -305,7 +391,7 @@ int main(int argc, char** argv) {
 			graphics::Geometry gcube = graphics::makeCube(0.5f);
 			auto const skyCubeI = gcube.indices;
 			auto const skyCubeV = gcube.positions();
-			VP vp = {glm::perspective(glm::radians(45.0f), 1280.0f / 720.0f, 0.1f, 100.0f), glm::lookAt({1.0f, 1.0f, 1.0f}, {}, graphics::g_nUp)};
+			VP vp;
 			graphics::Mesh mesh0("cube", boot.vram, graphics::Mesh::Type::eStatic);
 			graphics::Mesh mesh1("cone", boot.vram, graphics::Mesh::Type::eStatic);
 			graphics::Mesh skyCube("sky_cube", boot.vram, graphics::Mesh::Type::eStatic);
@@ -331,25 +417,37 @@ int main(int argc, char** argv) {
 				logE("shaders missing");
 				return 1;
 			}
+
+			Font font;
+			font.create(boot.vram, reader, "fonts/default", "fonts/default.json", sampler, context.colourFormat());
+
 			auto test = graphics::Shader(boot.device, {*reader.bytes(*testV), *reader.bytes(*testF)});
 			auto testTex = graphics::Shader(boot.device, {*reader.bytes(*testV), *reader.bytes(*testFTex)});
 			auto sskybox = graphics::Shader(boot.device, {*reader.bytes(*skyV), *reader.bytes(*skyF)});
+			graphics::Shader ui(boot.device, {*reader.bytes(*uiV), *reader.bytes(*uiF)});
 			auto pipe = context.makePipeline("test", context.pipeInfo(test));
-			auto pipeTex = context.makePipeline("test_tex", context.pipeInfo(testTex));
+			auto pipeTex = context.makePipeline("test_tex", context.pipeInfo(testTex, graphics::PFlags::inverse()));
+			auto pipeUI = context.makePipeline("ui", context.pipeInfo(ui, graphics::PFlags::inverse()));
+			Text text;
+			text.create(boot.vram, "text");
+			text.text.size = 80U;
+			text.text.colour = colours::yellow;
+			text.text.pos = {0.0f, 200.0f, 0.0f};
+			text.set(font, "Hi!");
 
 			SetLayouts layouts;
 			std::array const setNums = {0U, 1U, 2U};
 			layouts.make("main", setNums, pipeTex);
 			auto pipeSkyInfo = context.pipeInfo(sskybox);
 			pipeSkyInfo.fixedState.depthStencilState.depthWriteEnable = false;
-			pipeSkyInfo.fixedState.vertexInput = context.vertexInput({0, sizeof(glm::vec3), {}});
+			pipeSkyInfo.fixedState.vertexInput = context.vertexInput({0, sizeof(glm::vec3), {{vk::Format::eR32G32B32Sfloat, 0}}});
 			auto pipeSky = context.makePipeline("skybox", pipeSkyInfo);
 			layouts.make("skybox", 0, pipeSky);
 			texC.wait();
 			texR.wait();
 			winst.show();
 			Flags flags;
-			std::array<Transform, 3> tr;
+			std::array<Transform, 4> tr;
 			tr[1].position({-5.0f, -1.0f, -2.0f});
 			tr[2].position({0.0f, -2.0f, -3.0f});
 			time::Point t = time::now();
@@ -378,17 +476,24 @@ int main(int argc, char** argv) {
 				threads::sleep(5ms);
 				auto const fb = winst.framebufferSize();
 				vp.mat_p = glm::perspective(glm::radians(45.0f), (f32)fb.x / std::max((f32)fb.y, 1.0f), 0.1f, 100.0f);
-				tr[0].rotate(glm::radians(-180.0f) * dt.count(), glm::normalize(glm::vec3(1.0f)));
-				tr[1].rotate(glm::radians(360.0f) * dt.count(), graphics::g_nUp);
+				{
+					f32 const w = (f32)fb.x * 0.5f;
+					f32 const h = (f32)fb.y * 0.5f;
+					vp.mat_ui = glm::ortho(-w, w, -h, h, -1.0f, 1.0f);
+				}
 				// camera
 				{
 					glm::vec3 const moveDir = glm::normalize(glm::cross(camPos, graphics::g_nUp));
 					camPos += moveDir * dt.count() * 0.75f;
 					vp.mat_v = glm::lookAt(camPos, {}, graphics::g_nUp);
 				}
+				tr[0].rotate(glm::radians(-180.0f) * dt.count(), glm::normalize(glm::vec3(1.0f)));
+				tr[1].rotate(glm::radians(360.0f) * dt.count(), graphics::g_nUp);
 
 				TexturedMaterial texMat;
 				texMat.diffuse = texC;
+				TexturedMaterial fontMat;
+				fontMat.diffuse = *font.atlas;
 				Material mat;
 				Scene scene;
 				scene.skybox.mesh = skyCube;
@@ -396,6 +501,7 @@ int main(int argc, char** argv) {
 				scene.props[*pipeTex].push_back(Prop2{tr[0], mesh0, texMat});
 				scene.props[*pipe].push_back(Prop2{tr[1], mesh0, mat});
 				scene.props[*pipe].push_back(Prop2{tr[2], mesh1, mat});
+				scene.props[*pipeUI].push_back(Prop2{tr[3], *text.mesh, fontMat});
 
 				// render
 				if (context.waitForFrame()) {
@@ -443,6 +549,9 @@ int main(int argc, char** argv) {
 				}
 				flags.reset(Flag::eRecreated);
 			}
+			boot.device.waitIdle();
+			text.mesh.reset();
+			font.atlas.reset();
 		}
 	} catch (std::exception const& e) {
 		logE("exception: {}", e.what());

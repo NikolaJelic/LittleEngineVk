@@ -13,6 +13,7 @@ class QueueMultiplex final {
 	};
 	struct Queue : Indices {
 		vk::Queue queue;
+		QFlags flags;
 		bool bUnique = false;
 	};
 
@@ -51,7 +52,6 @@ class QueueMultiplex final {
 		return Lock(m_mutexes.gp.mutex, m_mutexes.t.mutex);
 	}
 
-  private:
 	Queue& queue(QType type) noexcept {
 		return m_queues[(std::size_t)type].first;
 	}
@@ -60,6 +60,7 @@ class QueueMultiplex final {
 		return m_queues[(std::size_t)type].first;
 	}
 
+  private:
 	kt::lockable<>& mutex(QType type) {
 		return *m_queues[(std::size_t)type].second;
 	}

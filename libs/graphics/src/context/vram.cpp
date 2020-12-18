@@ -4,6 +4,10 @@
 namespace le::graphics {
 VRAM::VRAM(Device& device, Transfer::CreateInfo const& transferInfo) : Memory(device), m_transfer(*this, transferInfo), m_device(device) {
 	g_log.log(lvl::info, 1, "[{}] VRAM constructed", g_name);
+	if (device.m_queues.queue(QType::eTransfer).flags.test(QType::eGraphics)) {
+		m_post.access = vk::AccessFlagBits::eShaderRead;
+		m_post.stages = vk::PipelineStageFlagBits::eFragmentShader;
+	}
 }
 
 VRAM::~VRAM() {
@@ -138,7 +142,7 @@ VRAM::Future VRAM::copy(Span<Span<std::byte>> pixelsArr, View<Image> dst, Layout
 		[[maybe_unused]] bool const bResult = mapMemory(*stage.buffer);
 		ENSURE(bResult, "Memory map failed");
 		u32 layerIdx = 0;
-		u32 const layerCount = (u32)d.size();
+		dst->layerCount = (u32)d.size();
 		std::vector<vk::BufferImageCopy> copyRegions;
 		for (auto const& pixels : d) {
 			auto const offset = layerIdx * layerSize;
@@ -170,7 +174,7 @@ VRAM::Future VRAM::copy(Span<Span<std::byte>> pixelsArr, View<Image> dst, Layout
 		barrier.subresourceRange.baseMipLevel = 0;
 		barrier.subresourceRange.levelCount = 1;
 		barrier.subresourceRange.baseArrayLayer = 0;
-		barrier.subresourceRange.layerCount = layerCount;
+		barrier.subresourceRange.layerCount = dst->layerCount;
 		barrier.srcAccessMask = {};
 		barrier.dstAccessMask = vk::AccessFlagBits::eTransferWrite;
 		using vkstg = vk::PipelineStageFlagBits;
@@ -185,10 +189,10 @@ VRAM::Future VRAM::copy(Span<Span<std::byte>> pixelsArr, View<Image> dst, Layout
 		barrier.subresourceRange.baseMipLevel = 0;
 		barrier.subresourceRange.levelCount = 1;
 		barrier.subresourceRange.baseArrayLayer = 0;
-		barrier.subresourceRange.layerCount = layerCount;
+		barrier.subresourceRange.layerCount = dst->layerCount;
 		barrier.srcAccessMask = vk::AccessFlagBits::eTransferRead;
-		barrier.dstAccessMask = {};
-		stage.command.pipelineBarrier(vkstg::eTransfer, vkstg::eBottomOfPipe, {}, {}, {}, barrier);
+		barrier.dstAccessMask = m_post.access;
+		stage.command.pipelineBarrier(vkstg::eTransfer, vkstg::eBottomOfPipe | m_post.stages, {}, {}, {}, barrier);
 		stage.command.end();
 		m_transfer.addStage(std::move(stage), std::move(p));
 	};

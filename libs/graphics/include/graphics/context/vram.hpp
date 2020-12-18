@@ -30,6 +30,10 @@ class VRAM final : public Memory {
 
 	Transfer m_transfer;
 	Ref<Device> m_device;
+	struct {
+		vk::PipelineStageFlags stages;
+		vk::AccessFlags access;
+	} m_post;
 };
 
 // impl

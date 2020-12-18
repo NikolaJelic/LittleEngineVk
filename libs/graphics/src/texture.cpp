@@ -104,10 +104,11 @@ bool Texture::busy() const {
 }
 
 bool Texture::ready() const {
-	return valid() && !busy();
+	auto const s = le::utils::futureState(m_storage.transfer);
+	return valid() && (s == le::FutureState::eReady || s == le::FutureState::eInvalid);
 }
 
-void Texture::wait() {
+void Texture::wait() const {
 	if (m_storage.transfer.valid()) {
 		m_storage.transfer.get();
 	}
