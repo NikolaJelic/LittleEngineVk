@@ -41,7 +41,7 @@ class Mesh {
   protected:
 	struct Storage {
 		Data data;
-		mutable VRAM::Future transfer;
+		VRAM::Future transfer;
 	};
 
 	Storage construct(std::string_view name, vk::BufferUsageFlags usage, void* pData, std::size_t size) const;

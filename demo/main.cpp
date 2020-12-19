@@ -549,7 +549,6 @@ int main(int argc, char** argv) {
 				}
 				flags.reset(Flag::eRecreated);
 			}
-			boot.device.waitIdle();
 			text.mesh.reset();
 			font.atlas.reset();
 		}

@@ -36,6 +36,7 @@ Mesh::Storage Mesh::construct(std::string_view name, vk::BufferUsageFlags usage,
 }
 
 void Mesh::destroy() {
+	wait();
 	VRAM& v = m_vram;
 	v.m_device.get().defer([&v, vb = m_vbo.data, ib = m_ibo.data]() mutable {
 		v.destroy(vb.buffer);
@@ -50,14 +51,14 @@ bool Mesh::valid() const {
 }
 
 bool Mesh::busy() const {
-	if (m_type == Type::eDynamic) {
+	if (!valid() || m_type == Type::eDynamic) {
 		return false;
 	}
-	return !utils::ready(m_vbo.transfer) || !utils::ready(m_ibo.transfer);
+	return m_vbo.transfer.busy() || m_ibo.transfer.busy();
 }
 
 bool Mesh::ready() const {
-	return valid() && !busy();
+	return valid() && m_vbo.transfer.ready(true) && m_ibo.transfer.ready(true);
 }
 
 void Mesh::wait() const {

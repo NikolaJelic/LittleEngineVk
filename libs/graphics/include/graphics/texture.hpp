@@ -42,7 +42,7 @@ class Texture {
 			std::vector<Span<std::byte>> bytes;
 			std::vector<RawImage> imgs;
 		} raw;
-		mutable VRAM::Future transfer;
+		VRAM::Future transfer;
 	};
 	Storage m_storage;
 

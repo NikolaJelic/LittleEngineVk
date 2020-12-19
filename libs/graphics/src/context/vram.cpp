@@ -72,7 +72,7 @@ VRAM::Future VRAM::copy(CView<Buffer> src, View<Buffer> dst, vk::DeviceSize size
 		m_transfer.addStage(std::move(stage), std::move(p));
 	};
 	m_transfer.m_queue.push(std::move(f));
-	return ret;
+	return {std::move(ret)};
 }
 
 VRAM::Future VRAM::stage(View<Buffer> deviceBuffer, void const* pData, vk::DeviceSize size) {
@@ -111,7 +111,7 @@ VRAM::Future VRAM::stage(View<Buffer> deviceBuffer, void const* pData, vk::Devic
 		}
 	};
 	m_transfer.m_queue.push(std::move(f));
-	return ret;
+	return {std::move(ret)};
 }
 
 VRAM::Future VRAM::copy(Span<Span<std::byte>> pixelsArr, View<Image> dst, LayoutTransition layouts) {
@@ -197,7 +197,7 @@ VRAM::Future VRAM::copy(Span<Span<std::byte>> pixelsArr, View<Image> dst, Layout
 		m_transfer.addStage(std::move(stage), std::move(p));
 	};
 	m_transfer.m_queue.push(std::move(f));
-	return ret;
+	return {std::move(ret)};
 }
 
 void VRAM::defer(View<Buffer> buffer, u64 defer) {

@@ -56,6 +56,19 @@ struct Lockable<false, M> {
 	}
 };
 
+///
+/// \brief std::future wrapper
+///
+template <typename T>
+struct Future {
+	mutable std::future<T> future;
+
+	FutureState state() const;
+	bool busy() const;
+	bool ready(bool bAllowInvalid) const;
+	void wait() const;
+};
+
 template <typename T>
 FutureState futureState(std::future<T> const& future) noexcept;
 
@@ -137,6 +150,32 @@ void substituteChars(std::string& out_input, std::initializer_list<std::pair<cha
 ///
 bool isCharEnclosedIn(std::string_view str, std::size_t idx, std::pair<char, char> wrapper);
 } // namespace strings
+
+template <typename T>
+FutureState Future<T>::state() const {
+	return utils::futureState(future);
+}
+
+template <typename T>
+bool Future<T>::busy() const {
+	return state() == FutureState::eDeferred;
+}
+
+template <typename T>
+bool Future<T>::ready(bool bAllowInvalid) const {
+	if (future.valid()) {
+		return state() == FutureState::eReady;
+	} else {
+		return bAllowInvalid;
+	}
+}
+
+template <typename T>
+void Future<T>::wait() const {
+	if (future.valid()) {
+		future.get();
+	}
+}
 } // namespace utils
 
 template <typename T>

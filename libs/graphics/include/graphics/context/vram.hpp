@@ -1,5 +1,6 @@
 #pragma once
 #include <core/traits.hpp>
+#include <core/utils.hpp>
 #include <graphics/context/defer_queue.hpp>
 #include <graphics/context/memory.hpp>
 #include <graphics/context/transfer.hpp>
@@ -10,7 +11,8 @@ using LayoutTransition = std::pair<vk::ImageLayout, vk::ImageLayout>;
 
 class VRAM final : public Memory {
   public:
-	using Future = Transfer::Future;
+	using notify_t = Transfer::notify_t;
+	using Future = ::le::utils::Future<notify_t>;
 
 	VRAM(Device& device, Transfer::CreateInfo const& transferInfo = {});
 	~VRAM();
@@ -24,7 +26,7 @@ class VRAM final : public Memory {
 	void defer(View<Buffer> buffer, u64 defer = Deferred::defaultDefer);
 	void defer(View<Image> image, u64 defer = Deferred::defaultDefer);
 
-	template <typename Cont = std::initializer_list<Ref<Future>>>
+	template <typename Cont = std::initializer_list<Ref<Future const>>>
 	void wait(Cont&& futures) const;
 	void waitIdle();
 
@@ -40,10 +42,8 @@ class VRAM final : public Memory {
 
 template <typename Cont>
 void VRAM::wait(Cont&& futures) const {
-	for (Future& f : futures) {
-		if (f.valid()) {
-			f.get();
-		}
+	for (Future const& f : futures) {
+		f.wait();
 	}
 }
 } // namespace le::graphics

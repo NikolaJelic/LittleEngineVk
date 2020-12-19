@@ -1,4 +1,3 @@
-#include <core/utils.hpp>
 #include <graphics/context/device.hpp>
 #include <graphics/texture.hpp>
 #include <graphics/utils/utils.hpp>
@@ -6,7 +5,7 @@
 namespace le::graphics {
 namespace {
 using sv = std::string_view;
-std::future<void> load(VRAM& vram, View<Image>& out_image, vk::Format format, glm::ivec2 size, Span<Span<std::byte>> bytes, [[maybe_unused]] sv name) {
+VRAM::Future load(VRAM& vram, View<Image>& out_image, vk::Format format, glm::ivec2 size, Span<Span<std::byte>> bytes, [[maybe_unused]] sv name) {
 	Image::CreateInfo imageInfo;
 	imageInfo.queueFlags = QType::eTransfer | QType::eGraphics;
 	imageInfo.createInfo.format = format;
@@ -83,6 +82,7 @@ bool Texture::construct(CreateInfo const& info) {
 }
 
 void Texture::destroy() {
+	wait();
 	VRAM& v = m_vram;
 	Device& d = v.m_device;
 	d.defer([&v, &d, data = m_storage.data, r = m_storage.raw]() mutable {
@@ -100,18 +100,15 @@ bool Texture::valid() const {
 }
 
 bool Texture::busy() const {
-	return le::utils::futureState(m_storage.transfer) == le::FutureState::eDeferred;
+	return valid() && m_storage.transfer.busy();
 }
 
 bool Texture::ready() const {
-	auto const s = le::utils::futureState(m_storage.transfer);
-	return valid() && (s == le::FutureState::eReady || s == le::FutureState::eInvalid);
+	return valid() && m_storage.transfer.ready(true);
 }
 
 void Texture::wait() const {
-	if (m_storage.transfer.valid()) {
-		m_storage.transfer.get();
-	}
+	m_storage.transfer.wait();
 }
 
 Texture::Data const& Texture::data() const noexcept {
