@@ -1,3 +1,4 @@
+#include <graphics/common.hpp>
 #include <graphics/context/device.hpp>
 #include <graphics/shader.hpp>
 
@@ -58,7 +59,7 @@ bool Shader::reconstruct(SpirVMap spirV) {
 vk::ShaderStageFlags Shader::stages() const noexcept {
 	vk::ShaderStageFlags ret;
 	for (std::size_t idx = 0; idx < m_modules.size(); ++idx) {
-		if (!default_v(m_modules[idx])) {
+		if (!Device::default_v(m_modules[idx])) {
 			ret |= typeToFlag[idx];
 		}
 	}
@@ -75,7 +76,7 @@ bool Shader::empty() const noexcept {
 
 void Shader::destroy() {
 	for (auto module : m_modules) {
-		if (!default_v(module)) {
+		if (!Device::default_v(module)) {
 			m_device.get().m_device.destroyShaderModule(module);
 		}
 	}

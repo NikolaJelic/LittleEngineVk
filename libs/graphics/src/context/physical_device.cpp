@@ -1,14 +1,16 @@
 #include <map>
 #include <sstream>
+#include <graphics/common.hpp>
+#include <graphics/context/device.hpp>
 #include <graphics/context/physical_device.hpp>
 
 namespace le::graphics {
 bool PhysicalDevice::surfaceSupport(u32 queueFamily, vk::SurfaceKHR surface) const {
-	return !default_v(device) && device.getSurfaceSupportKHR(queueFamily, surface);
+	return !Device::default_v(device) && device.getSurfaceSupportKHR(queueFamily, surface);
 }
 
 vk::SurfaceCapabilitiesKHR PhysicalDevice::surfaceCapabilities(vk::SurfaceKHR surface) const {
-	return !default_v(device) ? device.getSurfaceCapabilitiesKHR(surface) : vk::SurfaceCapabilitiesKHR();
+	return !Device::default_v(device) ? device.getSurfaceCapabilitiesKHR(surface) : vk::SurfaceCapabilitiesKHR();
 }
 
 std::string PhysicalDevice::toString() const {

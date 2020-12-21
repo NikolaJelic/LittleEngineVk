@@ -1,14 +1,18 @@
 #pragma once
 #include <unordered_map>
+#include <core/ref.hpp>
+#include <core/span.hpp>
 #include <core/view.hpp>
-#include <graphics/types.hpp>
 #include <graphics/utils/ring_buffer.hpp>
 #include <graphics/utils/rw_span.hpp>
+#include <vulkan/vulkan.hpp>
 
 namespace le::graphics {
 class Device;
 class VRAM;
 class Texture;
+struct Buffer;
+struct Image;
 
 struct BindingInfo {
 	vk::DescriptorSetLayoutBinding binding;

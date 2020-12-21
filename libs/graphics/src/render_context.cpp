@@ -3,6 +3,7 @@
 #include <core/log.hpp>
 #include <core/maths.hpp>
 #include <core/utils.hpp>
+#include <graphics/common.hpp>
 #include <graphics/context/vram.hpp>
 #include <graphics/render_context.hpp>
 
@@ -27,7 +28,7 @@ RenderContext::Render::~Render() {
 }
 
 void RenderContext::Render::destroy() {
-	if (!default_v(m_frame.primary.m_cmd)) {
+	if (!Device::default_v(m_frame.primary.m_cmd)) {
 		if (!m_context.get().endFrame()) {
 			g_log.log(lvl::warning, 1, "[{}] RenderContext failed to end frame", g_name);
 		}
@@ -129,7 +130,7 @@ bool RenderContext::waitForFrame() {
 		return false;
 	}
 	auto& sync = m_sync.get();
-	m_device.get().waitFor(sync.drawing);
+	m_device.get().waitFor(sync.sync.drawing);
 	m_device.get().decrementDeferred();
 	m_storage.status = Status::eReady;
 	return true;
@@ -144,7 +145,7 @@ std::optional<RenderContext::Frame> RenderContext::beginFrame(CommandBuffer::Pas
 		return std::nullopt;
 	}
 	FrameSync& sync = m_sync.get();
-	auto target = m_swapchain.get().acquireNextImage(sync.drawReady);
+	auto target = m_swapchain.get().acquireNextImage(sync.sync);
 	if (!target) {
 		return std::nullopt;
 	}
@@ -153,8 +154,8 @@ std::optional<RenderContext::Frame> RenderContext::beginFrame(CommandBuffer::Pas
 	sync.framebuffer = m_device.get().createFramebuffer(m_swapchain.get().renderPass(), target->attachments(), target->extent);
 	if (!sync.primary.commandBuffer.begin(m_swapchain.get().renderPass(), sync.framebuffer, target->extent, info)) {
 		ENSURE(false, "Failed to begin recording command buffer");
-		m_device.get().destroy(sync.framebuffer, sync.drawReady);
-		sync.drawReady = m_device.get().createSemaphore(); // sync.drawReady will be signalled by acquireNextImage and cannot be reused
+		m_device.get().destroy(sync.framebuffer, sync.sync.drawReady);
+		sync.sync.drawReady = m_device.get().createSemaphore(); // sync.drawReady will be signalled by acquireNextImage and cannot be reused
 		return std::nullopt;
 	}
 	return Frame{*target, sync.primary.commandBuffer};
@@ -179,16 +180,16 @@ bool RenderContext::endFrame() {
 	vk::SubmitInfo submitInfo;
 	vk::PipelineStageFlags const waitStages = vk::PipelineStageFlagBits::eColorAttachmentOutput;
 	submitInfo.waitSemaphoreCount = 1;
-	submitInfo.pWaitSemaphores = &sync.drawReady;
+	submitInfo.pWaitSemaphores = &sync.sync.drawReady;
 	submitInfo.pWaitDstStageMask = &waitStages;
 	submitInfo.commandBufferCount = 1;
 	submitInfo.pCommandBuffers = &sync.primary.commandBuffer.m_cmd;
 	submitInfo.signalSemaphoreCount = 1;
-	submitInfo.pSignalSemaphores = &sync.presentReady;
-	m_device.get().m_device.resetFences(sync.drawing);
-	m_device.get().m_queues.submit(QType::eGraphics, submitInfo, sync.drawing, false);
+	submitInfo.pSignalSemaphores = &sync.sync.presentReady;
+	m_device.get().m_device.resetFences(sync.sync.drawing);
+	m_device.get().m_queues.submit(QType::eGraphics, submitInfo, sync.sync.drawing, false);
 	m_storage.status = Status::eWaiting;
-	auto present = m_swapchain.get().present(sync.presentReady, sync.drawing);
+	auto present = m_swapchain.get().present(sync.sync);
 	if (!present) {
 		return false;
 	}
@@ -198,7 +199,7 @@ bool RenderContext::endFrame() {
 
 bool RenderContext::reconstructed(glm::ivec2 framebufferSize) {
 	auto const flags = m_swapchain.get().flags();
-	if (flags.any(Swapchain::Flag::eOutOfDate /*| Swapchain::Flag::eRotated*/ | Swapchain::Flag::ePaused)) {
+	if (flags.any(Swapchain::Flag::eOutOfDate | Swapchain::Flag::ePaused)) {
 		if (m_swapchain.get().reconstruct(framebufferSize)) {
 			m_storage.status = Status::eWaiting;
 			return true;

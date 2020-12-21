@@ -5,6 +5,9 @@
 #include <graphics/context/queue_multiplex.hpp>
 
 namespace le::graphics {
+template <typename T>
+using vAP = vk::ArrayProxy<T const> const&;
+
 class Device final {
   public:
 	enum class QSelect { eOptimal, eSingleFamily, eSingleQueue };
@@ -17,8 +20,6 @@ class Device final {
 
 	void waitIdle();
 	bool valid(vk::SurfaceKHR surface) const;
-
-	void waitIdle() const;
 
 	vk::Semaphore createSemaphore() const;
 	vk::Fence createFence(bool bSignalled) const;
@@ -51,6 +52,11 @@ class Device final {
 	void defer(Deferred::Callback callback, u64 defer = Deferred::defaultDefer);
 
 	void decrementDeferred();
+
+	template <typename T>
+	static constexpr bool default_v(T const& t) noexcept {
+		return t == T();
+	}
 
 	Ref<Instance> m_instance;
 	PhysicalDevice m_physicalDevice;

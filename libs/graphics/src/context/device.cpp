@@ -3,6 +3,7 @@
 #include <sstream>
 #include <unordered_set>
 #include <core/maths.hpp>
+#include <graphics/common.hpp>
 #include <graphics/context/device.hpp>
 #include <graphics/utils/utils.hpp>
 
@@ -57,7 +58,7 @@ Device::Device(Instance& instance, vk::SurfaceKHR surface, CreateInfo const& inf
 	m_metadata.lineWidth.second = m_physicalDevice.properties.limits.lineWidthRange[1U];
 	auto families = utils::queueFamilies(m_physicalDevice, m_metadata.surface);
 	if (info.qselect == QSelect::eSingleFamily || info.qselect == QSelect::eSingleQueue) {
-		std::optional<QueueFamily> uber;
+		std::optional<QueueMultiplex::Family> uber;
 		for (auto const& family : families) {
 			if (family.flags.all(QFlags::inverse())) {
 				uber = family;

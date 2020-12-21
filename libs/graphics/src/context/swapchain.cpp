@@ -1,5 +1,6 @@
 #include <map>
 #include <core/maths.hpp>
+#include <graphics/common.hpp>
 #include <graphics/context/device.hpp>
 #include <graphics/context/swapchain.hpp>
 #include <graphics/context/vram.hpp>
@@ -48,7 +49,7 @@ struct SwapchainCreateInfo {
 				break;
 			}
 		}
-		if (default_v(depthFormat)) {
+		if (Device::default_v(depthFormat)) {
 			depthFormat = vk::Format::eD16Unorm;
 		}
 		presentMode = bestFit(availableModes, info.desired.presentModes, availableModes.front());
@@ -92,7 +93,8 @@ struct SwapchainCreateInfo {
 } // namespace
 
 Swapchain::Frame& Swapchain::Storage::frame() {
-	return frames[imageIndex];
+	ENSURE(acquired, "Image not acquired");
+	return frames[acquired->value];
 }
 
 Swapchain::Swapchain(VRAM& vram) : m_vram(vram), m_device(vram.m_device) {
@@ -114,13 +116,13 @@ Swapchain::Swapchain(VRAM& vram, CreateInfo const& info, glm::ivec2 framebufferS
 }
 
 Swapchain::~Swapchain() {
-	if (!default_v(m_storage.swapchain)) {
+	if (!Device::default_v(m_storage.swapchain)) {
 		g_log.log(lvl::info, 1, "[{}] Vulkan swapchain destroyed", g_name);
 	}
 	destroy(m_storage, true);
 }
 
-std::optional<RenderTarget> Swapchain::acquireNextImage(vk::Semaphore setDrawReady) {
+std::optional<RenderTarget> Swapchain::acquireNextImage(RenderSync const& sync) {
 	orientCheck();
 	if (m_storage.flags.any(Flag::ePaused | Flag::eOutOfDate)) {
 		return std::nullopt;
@@ -130,7 +132,7 @@ std::optional<RenderTarget> Swapchain::acquireNextImage(vk::Semaphore setDrawRea
 		return m_storage.frame().target;
 	}
 	try {
-		m_storage.acquired = m_device.get().m_device.acquireNextImageKHR(m_storage.swapchain, maths::max<u64>(), setDrawReady, {});
+		m_storage.acquired = m_device.get().m_device.acquireNextImageKHR(m_storage.swapchain, maths::max<u64>(), sync.drawReady, {});
 		setFlags(m_storage.acquired->result);
 	} catch (vk::OutOfDateKHRError const& e) {
 		m_storage.flags.set(Flag::eOutOfDate);
@@ -143,13 +145,12 @@ std::optional<RenderTarget> Swapchain::acquireNextImage(vk::Semaphore setDrawRea
 		m_storage.acquired.reset();
 		return std::nullopt;
 	}
-	m_storage.imageIndex = (u32)m_storage.acquired->value;
 	auto& frame = m_storage.frame();
 	m_device.get().waitFor(frame.drawn);
 	return frame.target;
 }
 
-bool Swapchain::present(vk::Semaphore drawWait, vk::Fence onDrawn) {
+bool Swapchain::present(RenderSync const& sync) {
 	if (m_storage.flags.any(Flag::ePaused | Flag::eOutOfDate)) {
 		return false;
 	}
@@ -160,9 +161,9 @@ bool Swapchain::present(vk::Semaphore drawWait, vk::Fence onDrawn) {
 	}
 	Frame& frame = m_storage.frame();
 	vk::PresentInfoKHR presentInfo;
-	auto const index = m_storage.imageIndex;
+	auto const index = m_storage.acquired->value;
 	presentInfo.waitSemaphoreCount = 1U;
-	presentInfo.pWaitSemaphores = &drawWait;
+	presentInfo.pWaitSemaphores = &sync.presentReady;
 	presentInfo.swapchainCount = 1U;
 	presentInfo.pSwapchains = &m_storage.swapchain;
 	presentInfo.pImageIndices = &index;
@@ -181,7 +182,7 @@ bool Swapchain::present(vk::Semaphore drawWait, vk::Fence onDrawn) {
 		g_log.log(lvl::warning, 1, "[{}] Swapchain Failed to present image [{}]", g_name, g_vkResultStr[result]);
 		return false;
 	}
-	frame.drawn = onDrawn;
+	frame.drawn = sync.drawing;
 	orientCheck(); // Must submit acquired image, so skipping extent check here
 	return true;
 }
@@ -190,7 +191,7 @@ bool Swapchain::reconstruct(glm::ivec2 framebufferSize, Span<vk::PresentModeKHR>
 	if (!desiredModes.empty()) {
 		m_metadata.info.desired.presentModes = desiredModes;
 	}
-	Storage retired = m_storage;
+	Storage retired = std::move(m_storage);
 	m_metadata.retired = retired.swapchain;
 	bool const bResult = construct(framebufferSize);
 	auto const extent = m_storage.current.extent;
@@ -201,7 +202,6 @@ bool Swapchain::reconstruct(glm::ivec2 framebufferSize, Span<vk::PresentModeKHR>
 		g_log.log(lvl::error, 1, "[{}] Vulkan swapchain reconstruction failed!", g_name);
 	}
 	destroy(retired, false);
-
 	return bResult;
 }
 
@@ -262,9 +262,15 @@ bool Swapchain::construct(glm::ivec2 framebufferSize) {
 		Image::CreateInfo depthImageInfo;
 		depthImageInfo.createInfo.format = info.depthFormat;
 		depthImageInfo.vmaUsage = VMA_MEMORY_USAGE_GPU_ONLY;
+#if defined(LEVK_ANDROID)
+		depthImageInfo.vmaUsage = VMA_MEMORY_USAGE_GPU_LAZILY_ALLOCATED;
+#endif
 		depthImageInfo.createInfo.extent = vk::Extent3D(m_storage.current.extent, 1);
 		depthImageInfo.createInfo.tiling = vk::ImageTiling::eOptimal;
 		depthImageInfo.createInfo.usage = vk::ImageUsageFlagBits::eDepthStencilAttachment;
+#if defined(LEVK_ANDROID)
+		depthImageInfo.createInfo.usage |= vk::ImageUsageFlagBits::eTransientAttachment;
+#endif
 		depthImageInfo.createInfo.samples = vk::SampleCountFlagBits::e1;
 		depthImageInfo.createInfo.imageType = vk::ImageType::e2D;
 		depthImageInfo.createInfo.initialLayout = vk::ImageLayout::eUndefined;
@@ -300,10 +306,13 @@ void Swapchain::makeRenderPass() {
 		attachments[0].format = m_metadata.formats.colour;
 		attachments[0].samples = vk::SampleCountFlagBits::e1;
 		attachments[0].loadOp = vk::AttachmentLoadOp::eClear;
+		attachments[0].storeOp = vk::AttachmentStoreOp::eStore;
 		attachments[0].stencilLoadOp = vk::AttachmentLoadOp::eDontCare;
 		attachments[0].stencilStoreOp = vk::AttachmentStoreOp::eDontCare;
-		attachments[0].initialLayout = vk::ImageLayout::eUndefined;
-		attachments[0].finalLayout = vk::ImageLayout::ePresentSrcKHR;
+		// attachments[0].initialLayout = vk::ImageLayout::eUndefined;
+		// attachments[0].finalLayout = vk::ImageLayout::ePresentSrcKHR;
+		attachments[0].initialLayout = m_metadata.info.transitions.colour.first;
+		attachments[0].finalLayout = m_metadata.info.transitions.colour.second;
 		colourAttachment.attachment = 0;
 		colourAttachment.layout = vk::ImageLayout::eColorAttachmentOptimal;
 	}
@@ -312,10 +321,12 @@ void Swapchain::makeRenderPass() {
 		attachments[1].samples = vk::SampleCountFlagBits::e1;
 		attachments[1].loadOp = vk::AttachmentLoadOp::eClear;
 		attachments[1].storeOp = vk::AttachmentStoreOp::eDontCare;
-		attachments[1].stencilLoadOp = vk::AttachmentLoadOp::eDontCare;
+		attachments[1].stencilLoadOp = vk::AttachmentLoadOp::eClear;
 		attachments[1].stencilStoreOp = vk::AttachmentStoreOp::eDontCare;
-		attachments[1].initialLayout = vk::ImageLayout::eUndefined;
-		attachments[1].finalLayout = vk::ImageLayout::ePresentSrcKHR;
+		// attachments[1].initialLayout = vk::ImageLayout::eUndefined;
+		// attachments[1].finalLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
+		attachments[1].initialLayout = m_metadata.info.transitions.depth.first;
+		attachments[1].finalLayout = m_metadata.info.transitions.depth.second;
 		depthAttachment.attachment = 1;
 		depthAttachment.layout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
 	}
@@ -327,9 +338,17 @@ void Swapchain::makeRenderPass() {
 	vk::SubpassDependency dependency;
 	dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
 	dependency.dstSubpass = 0;
-	dependency.srcStageMask = vk::PipelineStageFlagBits::eColorAttachmentOutput;
-	dependency.dstStageMask = vk::PipelineStageFlagBits::eColorAttachmentOutput;
-	dependency.dstAccessMask = vk::AccessFlagBits::eColorAttachmentRead | vk::AccessFlagBits::eColorAttachmentWrite;
+	dependency.srcStageMask = vk::PipelineStageFlagBits::eColorAttachmentOutput | vk::PipelineStageFlagBits::eLateFragmentTests;
+	dependency.dstStageMask = vk::PipelineStageFlagBits::eColorAttachmentOutput | vk::PipelineStageFlagBits::eLateFragmentTests;
+	using AF = vk::AccessFlagBits;
+	// dependency.dstAccessMask = AF::eColorAttachmentRead | AF::eColorAttachmentWrite | AF::eDepthStencilAttachmentRead | AF::eDepthStencilAttachmentWrite;
+	// dependency.srcAccessMask = vk::AccessFlagBits::eMemoryWrite;
+	// dependency.dstAccessMask = vk::AccessFlagBits::eMemoryRead | vk::AccessFlagBits::eMemoryWrite;
+	// dependency.srcStageMask = vk::PipelineStageFlagBits::eAllGraphics;
+	// dependency.dstStageMask = vk::PipelineStageFlagBits::eAllGraphics;
+
+	// dependency.srcAccessMask = AF::eColorAttachmentWrite;
+	dependency.dstAccessMask = AF::eColorAttachmentWrite | AF::eDepthStencilAttachmentWrite;
 	m_metadata.renderPass = m_device.get().createRenderPass(attachments, subpass, dependency);
 }
 

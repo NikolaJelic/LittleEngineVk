@@ -1,5 +1,7 @@
+#include <graphics/common.hpp>
 #include <graphics/context/command_buffer.hpp>
 #include <graphics/context/device.hpp>
+#include <graphics/context/memory_types.hpp>
 #include <graphics/pipeline.hpp>
 
 namespace le::graphics {
@@ -17,7 +19,7 @@ std::vector<CommandBuffer> CommandBuffer::make(Device& device, vk::CommandPool p
 }
 
 CommandBuffer::CommandBuffer(vk::CommandBuffer cmd, vk::CommandPool pool) : m_cmd(cmd), m_pool(pool) {
-	ENSURE(!default_v(cmd), "Null command buffer!");
+	ENSURE(!Device::default_v(cmd), "Null command buffer!");
 }
 
 bool CommandBuffer::begin(vk::CommandBufferUsageFlags usage) {
@@ -99,6 +101,36 @@ void CommandBuffer::drawIndexed(u32 indexCount, u32 instanceCount, u32 firstInde
 void CommandBuffer::draw(u32 vertexCount, u32 instanceCount, u32 firstVertex, u32 firstInstance) const {
 	ENSURE(rendering(), "Command buffer not rendering!");
 	m_cmd.draw(vertexCount, instanceCount, firstVertex, firstInstance);
+}
+
+void CommandBuffer::transitionImage(Image const& image, vk::ImageAspectFlags aspect, Layouts transition, Access access, Stages stages) const {
+	transitionImage(image.image, image.layerCount, aspect, transition, access, stages);
+}
+
+void CommandBuffer::transitionImage(vk::Image image, u32 layerCount, vk::ImageAspectFlags aspect, Layouts transition, Access access, Stages stages) const {
+	ENSURE(recording(), "Command buffer not recording!");
+	vk::ImageMemoryBarrier barrier;
+	barrier.oldLayout = transition.first;
+	barrier.newLayout = transition.second;
+	barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+	barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+	barrier.image = image;
+	barrier.subresourceRange.aspectMask = aspect;
+	barrier.subresourceRange.baseMipLevel = 0;
+	barrier.subresourceRange.levelCount = 1;
+	barrier.subresourceRange.baseArrayLayer = 0;
+	barrier.subresourceRange.layerCount = layerCount;
+	barrier.srcAccessMask = access.first;
+	barrier.dstAccessMask = access.second;
+	m_cmd.pipelineBarrier(stages.first, stages.second, {}, {}, {}, barrier);
+}
+
+void CommandBuffer::endRenderPass() {
+	ENSURE(rendering(), "Command buffer not rendering!");
+	if (m_flags.test(Flag::eRendering)) {
+		m_cmd.endRenderPass();
+		m_flags.reset(Flag::eRendering);
+	}
 }
 
 void CommandBuffer::end() {

@@ -1,12 +1,22 @@
 #pragma once
-#include <graphics/types.hpp>
+#include <core/span.hpp>
+#include <core/std_types.hpp>
+#include <graphics/qflags.hpp>
 #include <kt/async_queue/async_queue.hpp>
+#include <vulkan/vulkan.hpp>
 
 namespace le::graphics {
 class Instance;
 
 class QueueMultiplex final {
   public:
+	struct Family {
+		u32 familyIndex = 0;
+		u32 total = 0;
+		u32 reserved = 0;
+		u32 nextQueueIndex = 0;
+		QFlags flags;
+	};
 	struct Indices {
 		u32 familyIndex = 0;
 		u32 arrayIndex = 0;
@@ -20,7 +30,7 @@ class QueueMultiplex final {
 	using QCI = std::pair<vk::DeviceQueueCreateInfo, std::vector<QueueMultiplex::Queue>>;
 
   public:
-	std::vector<vk::DeviceQueueCreateInfo> select(std::vector<QueueFamily> families);
+	std::vector<vk::DeviceQueueCreateInfo> select(std::vector<Family> families);
 	void setup(vk::Device device);
 
 	u32 familyIndex(QType type) const noexcept {
@@ -67,9 +77,9 @@ class QueueMultiplex final {
 
 	template <std::size_t N>
 	using QCIArr = std::array<QCI, N>;
-	QCIArr<1> makeFrom1(QueueFamily& gpt, Span<f32> prio);
-	QCIArr<2> makeFrom2(QueueFamily& a, QueueFamily& b, Span<f32> pa, Span<f32> pb);
-	QCIArr<3> makeFrom3(QueueFamily& g, QueueFamily& p, QueueFamily& t, Span<f32> pg, Span<f32> pp, Span<f32> pt);
+	QCIArr<1> makeFrom1(Family& gpt, Span<f32> prio);
+	QCIArr<2> makeFrom2(Family& a, Family& b, Span<f32> pa, Span<f32> pb);
+	QCIArr<3> makeFrom3(Family& g, Family& p, Family& t, Span<f32> pg, Span<f32> pp, Span<f32> pt);
 
 	using qcivec = std::vector<vk::DeviceQueueCreateInfo>;
 	using Assign = std::array<std::pair<std::size_t, std::size_t>, 3>;

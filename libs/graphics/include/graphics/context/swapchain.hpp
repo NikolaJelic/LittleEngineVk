@@ -3,11 +3,15 @@
 #include <core/ref.hpp>
 #include <core/span.hpp>
 #include <glm/vec2.hpp>
-#include <graphics/types.hpp>
+#include <graphics/context/memory_types.hpp>
+#include <graphics/context/render_types.hpp>
+#include <graphics/qflags.hpp>
 
 namespace le::graphics {
 class VRAM;
 class Device;
+
+using LayoutPair = std::pair<vk::ImageLayout, vk::ImageLayout>;
 
 class Swapchain {
   public:
@@ -30,7 +34,6 @@ class Swapchain {
 		std::optional<vk::ResultValue<u32>> acquired;
 
 		Display current;
-		u32 imageIndex = 0;
 		u8 imageCount = 0;
 		Flags flags;
 
@@ -49,6 +52,11 @@ class Swapchain {
 			Span<vk::PresentModeKHR> presentModes = defaultPresentMode;
 			u32 imageCount = 2;
 		} desired;
+
+		struct {
+			LayoutPair colour = {vk::ImageLayout::eUndefined, vk::ImageLayout::ePresentSrcKHR};
+			LayoutPair depth = {vk::ImageLayout::eUndefined, vk::ImageLayout::eDepthStencilAttachmentOptimal};
+		} transitions;
 	};
 	struct Metadata {
 		CreateInfo info;
@@ -73,8 +81,8 @@ class Swapchain {
 	Swapchain& operator=(Swapchain&&);
 	~Swapchain();
 
-	std::optional<RenderTarget> acquireNextImage(vk::Semaphore setDrawReady);
-	bool present(vk::Semaphore drawWait, vk::Fence onDrawn);
+	std::optional<RenderTarget> acquireNextImage(RenderSync const& sync);
+	bool present(RenderSync const& sync);
 	bool reconstruct(glm::ivec2 framebufferSize = {}, Span<vk::PresentModeKHR> desiredModes = {});
 
 	Flags flags() const noexcept;

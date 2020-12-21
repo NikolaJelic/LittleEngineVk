@@ -91,6 +91,7 @@ class RenderContext : NoCopy {
 	struct Storage {
 		std::unordered_map<Hash, Pipeline> pipes;
 		std::vector<vk::Sampler> samplers;
+		std::optional<RenderTarget> target;
 		Status status = {};
 	};
 

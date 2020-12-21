@@ -1,5 +1,6 @@
 #include <map>
 #include <set>
+#include <graphics/common.hpp>
 #include <graphics/context/device.hpp>
 #include <graphics/context/instance.hpp>
 #include <graphics/context/queue_multiplex.hpp>
@@ -10,7 +11,7 @@ using vkqf = vk::QueueFlagBits;
 
 class Selector {
   public:
-	Selector(std::vector<QueueFamily> families) : m_families(std::move(families)) {
+	Selector(std::vector<QueueMultiplex::Family> families) : m_families(std::move(families)) {
 		QFlags found;
 		for (auto const& family : m_families) {
 			found.set(family.flags);
@@ -22,7 +23,7 @@ class Selector {
 		}
 	}
 
-	QueueFamily* exact(QFlags flags) {
+	QueueMultiplex::Family* exact(QFlags flags) {
 		for (auto& f : m_families) {
 			// Only return if queue flags match exactly
 			if (f.flags == flags && f.reserved < f.total) {
@@ -32,7 +33,7 @@ class Selector {
 		return nullptr;
 	}
 
-	QueueFamily* best(QFlags flags) {
+	QueueMultiplex::Family* best(QFlags flags) {
 		for (auto& f : m_families) {
 			// Return if queue supports desired flags
 			if (f.flags.test(flags) && f.reserved < f.total) {
@@ -45,8 +46,8 @@ class Selector {
 	template <typename T>
 	using stdil = std::initializer_list<T>;
 
-	QueueFamily* reserve(stdil<QFlags> combo) {
-		QueueFamily* f = nullptr;
+	QueueMultiplex::Family* reserve(stdil<QFlags> combo) {
+		QueueMultiplex::Family* f = nullptr;
 		// First pass: exact match
 		for (QFlags flags : combo) {
 			if (f = exact(flags); f && f->reserved < f->total) {
@@ -70,11 +71,11 @@ class Selector {
 		return nullptr;
 	}
 
-	std::vector<QueueFamily> m_families;
+	std::vector<QueueMultiplex::Family> m_families;
 	u32 m_queueCount = 0;
 };
 
-QueueMultiplex::QCI createInfo(QueueFamily& out_family, Span<f32> prio) {
+QueueMultiplex::QCI createInfo(QueueMultiplex::Family& out_family, Span<f32> prio) {
 	QueueMultiplex::QCI ret;
 	ret.first.queueFamilyIndex = out_family.familyIndex;
 	ret.first.queueCount = (u32)prio.size();
@@ -100,7 +101,7 @@ constexpr bool uniqueQueue(T&& t, Ts&&... ts) noexcept {
 }
 } // namespace
 
-std::vector<vk::DeviceQueueCreateInfo> QueueMultiplex::select(std::vector<QueueFamily> families) {
+std::vector<vk::DeviceQueueCreateInfo> QueueMultiplex::select(std::vector<Family> families) {
 	std::vector<vk::DeviceQueueCreateInfo> ret;
 	Selector sl(std::move(families));
 	// Reserve one queue for graphics/present
@@ -180,18 +181,18 @@ void QueueMultiplex::submit(QType type, vAP<vk::SubmitInfo> infos, vk::Fence sig
 	}
 }
 
-QueueMultiplex::QCIArr<1> QueueMultiplex::makeFrom1(QueueFamily& gpt, Span<f32> prio) {
+QueueMultiplex::QCIArr<1> QueueMultiplex::makeFrom1(Family& gpt, Span<f32> prio) {
 	return {createInfo(gpt, prio)};
 }
 
-QueueMultiplex::QCIArr<2> QueueMultiplex::makeFrom2(QueueFamily& a, QueueFamily& b, Span<f32> pa, Span<f32> pb) {
+QueueMultiplex::QCIArr<2> QueueMultiplex::makeFrom2(Family& a, Family& b, Span<f32> pa, Span<f32> pb) {
 	std::array<QueueMultiplex::QCI, 2> ret;
 	ret[0] = createInfo(a, pa);
 	ret[1] = createInfo(b, pb);
 	return ret;
 }
 
-QueueMultiplex::QCIArr<3> QueueMultiplex::makeFrom3(QueueFamily& g, QueueFamily& p, QueueFamily& t, Span<f32> pg, Span<f32> pp, Span<f32> pt) {
+QueueMultiplex::QCIArr<3> QueueMultiplex::makeFrom3(Family& g, Family& p, Family& t, Span<f32> pg, Span<f32> pp, Span<f32> pt) {
 	std::array<QueueMultiplex::QCI, 3> ret;
 	ret[0] = createInfo(g, pg);
 	ret[1] = createInfo(p, pp);

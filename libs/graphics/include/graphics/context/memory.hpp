@@ -5,7 +5,7 @@
 #include <core/monotonic_map.hpp>
 #include <core/ref.hpp>
 #include <core/view.hpp>
-#include <graphics/types.hpp>
+#include <graphics/context/memory_types.hpp>
 #include <kt/async_queue/async_queue.hpp>
 
 namespace le::graphics {

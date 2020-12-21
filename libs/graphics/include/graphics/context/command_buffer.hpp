@@ -2,17 +2,27 @@
 #include <vector>
 #include <core/ensure.hpp>
 #include <core/view.hpp>
-#include <graphics/types.hpp>
 #include <kt/enum_flags/enum_flags.hpp>
+#include <vulkan/vulkan.hpp>
 
 namespace le::graphics {
 class Device;
 class Pipeline;
 class DescriptorSet;
+struct Buffer;
+struct Image;
+
+template <typename T>
+using vAP = vk::ArrayProxy<T const> const&;
 
 class CommandBuffer {
   public:
 	using vBP = vk::PipelineBindPoint;
+	template <typename T>
+	using Duet = std::pair<T, T>;
+	using Layouts = Duet<vk::ImageLayout>;
+	using Access = Duet<vk::AccessFlags>;
+	using Stages = Duet<vk::PipelineStageFlags>;
 
 	struct PassInfo {
 		std::vector<vk::ClearValue> clearValues;
@@ -40,6 +50,10 @@ class CommandBuffer {
 	void drawIndexed(u32 indexCount, u32 instanceCount = 1, u32 firstIndex = 0, s32 vertexOffset = 0, u32 firstInstance = 0) const;
 	void draw(u32 vertexCount, u32 instanceCount = 1, u32 firstVertex = 0, u32 firstInstance = 0) const;
 
+	void transitionImage(Image const& image, vk::ImageAspectFlags aspect, Layouts transition, Access access, Stages stages) const;
+	void transitionImage(vk::Image image, u32 layerCount, vk::ImageAspectFlags aspect, Layouts transition, Access access, Stages stages) const;
+
+	void endRenderPass();
 	void end();
 
 	bool valid() const noexcept;
@@ -63,7 +77,7 @@ void CommandBuffer::push(vk::PipelineLayout layout, vk::ShaderStageFlags stages,
 	m_cmd.pushConstants<T>(layout, stages, offset, pushConstants);
 }
 inline bool CommandBuffer::valid() const noexcept {
-	return !default_v(m_cmd);
+	return m_cmd != vk::CommandBuffer();
 }
 inline bool CommandBuffer::recording() const noexcept {
 	return valid() && m_flags.test(Flag::eRecording);

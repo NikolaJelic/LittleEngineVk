@@ -3,9 +3,12 @@
 #include <core/io/reader.hpp>
 #include <core/os.hpp>
 #include <graphics/context/physical_device.hpp>
+#include <graphics/context/queue_multiplex.hpp>
 #include <graphics/descriptor_set.hpp>
 #include <graphics/geometry.hpp>
+#include <graphics/pipeline.hpp>
 #include <graphics/shader.hpp>
+#include <graphics/texture.hpp>
 #include <spirv_cross.hpp>
 
 inline constexpr bool levk_shaderCompiler = levk_desktopOS;
@@ -36,13 +39,13 @@ SetBindings extractBindings(Shader const& shader);
 
 bytearray convert(std::initializer_list<u8> bytes);
 bytearray convert(Span<u8> bytes);
-RawImage decompress(bytearray compressed, u8 channels = 4);
-void release(RawImage rawImage);
+Texture::RawImage decompress(bytearray compressed, u8 channels = 4);
+void release(Texture::RawImage rawImage);
 
 using CubeImageIDs = std::array<std::string_view, 6>;
 constexpr CubeImageIDs cubeImageIDs = {"right", "left", "up", "down", "front", "back"};
 std::vector<bytearray> loadCubemap(io::Reader& reader, io::Path const& prefix, std::string_view ext = ".jpg", CubeImageIDs const& ids = cubeImageIDs);
 
-std::vector<QueueFamily> queueFamilies(PhysicalDevice const& device, vk::SurfaceKHR surface);
+std::vector<QueueMultiplex::Family> queueFamilies(PhysicalDevice const& device, vk::SurfaceKHR surface);
 } // namespace utils
 } // namespace le::graphics

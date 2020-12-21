@@ -1,3 +1,4 @@
+#include <graphics/common.hpp>
 #include <graphics/context/device.hpp>
 #include <graphics/context/frame_sync.hpp>
 
@@ -5,21 +6,21 @@ namespace le::graphics {
 BufferedFrameSync::BufferedFrameSync(Device& device, std::size_t size, u32 secondaryCount) : m_device(device) {
 	std::size_t idx = 0;
 	ts.resize(size);
-	for (auto& sync : ts) {
-		sync.drawReady = device.createSemaphore();
-		sync.presentReady = device.createSemaphore();
-		sync.drawing = device.createFence(true);
-		sync.secondary.resize((std::size_t)secondaryCount);
+	for (auto& s : ts) {
+		s.sync.drawReady = device.createSemaphore();
+		s.sync.presentReady = device.createSemaphore();
+		s.sync.drawing = device.createFence(true);
+		s.secondary.resize((std::size_t)secondaryCount);
 		for (std::size_t i = 0; i < (std::size_t)secondaryCount + 1; ++i) {
 			vk::CommandPoolCreateInfo commandPoolCreateInfo;
 			commandPoolCreateInfo.queueFamilyIndex = device.m_queues.familyIndex(QType::eGraphics);
 			commandPoolCreateInfo.flags = vk::CommandPoolCreateFlagBits::eResetCommandBuffer | vk::CommandPoolCreateFlagBits::eTransient;
-			FrameSync::Command& c = i == 0 ? sync.primary : sync.secondary[i - 1];
+			FrameSync::Command& c = i == 0 ? s.primary : s.secondary[i - 1];
 			c.pool = device.m_device.createCommandPool(commandPoolCreateInfo);
 			c.commandBuffer = CommandBuffer::make(device, c.pool, 1, i > 0).back();
 			c.buffer = c.commandBuffer.m_cmd;
 		}
-		sync.index = (u32)idx++;
+		s.index = (u32)idx++;
 	}
 	g_log.log(lvl::info, 1, "[{}] BufferedFrameSync (x{}) constructed", g_name, size);
 }
@@ -50,13 +51,13 @@ void BufferedFrameSync::refreshSync() {
 		Device& d = m_device;
 		d.defer([&d, sync = ts]() mutable {
 			for (auto& s : sync) {
-				d.destroy(s.drawing, s.drawReady, s.presentReady);
+				d.destroy(s.sync.drawing, s.sync.drawReady, s.sync.presentReady);
 			}
 		});
-		for (auto& sync : ts) {
-			sync.drawReady = d.createSemaphore();
-			sync.presentReady = d.createSemaphore();
-			sync.drawing = d.createFence(true);
+		for (auto& s : ts) {
+			s.sync.drawReady = d.createSemaphore();
+			s.sync.presentReady = d.createSemaphore();
+			s.sync.drawing = d.createFence(true);
 		}
 		g_log.log(lvl::info, 1, "[{}] BufferedFrameSync refreshed", g_name);
 	}
@@ -67,7 +68,7 @@ void BufferedFrameSync::destroy() {
 		Device& d = m_device;
 		d.defer([&d, sync = ts]() mutable {
 			for (auto& s : sync) {
-				d.destroy(s.framebuffer, s.drawing, s.drawReady, s.presentReady);
+				d.destroy(s.framebuffer, s.sync.drawing, s.sync.drawReady, s.sync.presentReady);
 				d.destroy(s.primary.pool);
 				for (FrameSync::Command& c : s.secondary) {
 					d.destroy(c.pool);

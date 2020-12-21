@@ -19,13 +19,13 @@ void ensureSet(T& out_src, U&& u) {
 
 template <typename T, typename U>
 void setIfSet(T& out_dst, U&& u) {
-	if (!default_v(u)) {
+	if (!Device::default_v(u)) {
 		out_dst = u;
 	}
 }
 
 bool valid(Shader::ModuleMap const& shaders) noexcept {
-	return std::any_of(shaders.begin(), shaders.end(), [](vk::ShaderModule const& m) -> bool { return !default_v(m); });
+	return std::any_of(shaders.begin(), shaders.end(), [](vk::ShaderModule const& m) -> bool { return !Device::default_v(m); });
 }
 } // namespace
 
@@ -86,9 +86,9 @@ SetFactory Pipeline::makeSetFactory(u32 set, std::size_t rotateCount) const {
 
 bool Pipeline::construct(bool bFixed) {
 	auto& c = m_metadata.createInfo;
-	ENSURE(!default_v(c.dynamicState.renderPass), "Invalid render pass");
+	ENSURE(!Device::default_v(c.dynamicState.renderPass), "Invalid render pass");
 	ENSURE(c.dynamicState.shader && valid(c.dynamicState.shader->m_modules), "Invalid shader m_modules");
-	if (!c.dynamicState.shader || !valid(c.dynamicState.shader->m_modules) || default_v(c.dynamicState.renderPass)) {
+	if (!c.dynamicState.shader || !valid(c.dynamicState.shader->m_modules) || Device::default_v(c.dynamicState.renderPass)) {
 		return false;
 	}
 	if (bFixed) {
@@ -161,7 +161,7 @@ bool Pipeline::construct(bool bFixed) {
 		shaderCreateInfo.reserve(c.dynamicState.shader->m_modules.size());
 		for (std::size_t idx = 0; idx < c.dynamicState.shader->m_modules.size(); ++idx) {
 			vk::ShaderModule const& module = c.dynamicState.shader->m_modules[idx];
-			if (!default_v(module)) {
+			if (!Device::default_v(module)) {
 				vk::PipelineShaderStageCreateInfo createInfo;
 				createInfo.stage = Shader::typeToFlag[idx];
 				createInfo.module = module;
@@ -193,7 +193,7 @@ bool Pipeline::construct(bool bFixed) {
 
 void Pipeline::destroy(bool bFixed) {
 	Device& d = m_device;
-	if (!default_v(m_storage.dynamic.pipeline)) {
+	if (!Device::default_v(m_storage.dynamic.pipeline)) {
 		d.defer([&d, dy = m_storage.dynamic]() mutable { d.destroy(dy.pipeline); });
 		m_storage.dynamic = {};
 	}

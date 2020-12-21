@@ -15,6 +15,12 @@ class Texture {
 		glm::ivec2 size = {};
 		Type type;
 	};
+	struct RawImage {
+		Span<std::byte> bytes;
+		int width = 0;
+		int height = 0;
+	};
+
 	struct Compressed;
 	struct Raw;
 	struct CreateInfo;

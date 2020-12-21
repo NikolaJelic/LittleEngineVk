@@ -3,6 +3,7 @@
 
 #include <core/index_view.hpp>
 #include <graphics/bitmap_text.hpp>
+#include <graphics/common.hpp>
 #include <graphics/context/bootstrap.hpp>
 #include <graphics/geometry.hpp>
 #include <graphics/mesh.hpp>

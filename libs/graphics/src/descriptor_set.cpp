@@ -1,3 +1,4 @@
+#include <graphics/common.hpp>
 #include <graphics/context/device.hpp>
 #include <graphics/context/vram.hpp>
 #include <graphics/descriptor_set.hpp>

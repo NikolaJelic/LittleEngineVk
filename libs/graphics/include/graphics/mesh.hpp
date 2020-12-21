@@ -2,7 +2,6 @@
 #include <core/view.hpp>
 #include <graphics/context/vram.hpp>
 #include <graphics/geometry.hpp>
-#include <graphics/types.hpp>
 
 namespace le::graphics {
 class Device;
@@ -86,6 +85,6 @@ inline Mesh::Type Mesh::type() const noexcept {
 	return m_type;
 }
 inline constexpr bool Mesh::hasIndices() const noexcept {
-	return m_ibo.data.count > 0 && m_ibo.data.buffer.valid() && !default_v(m_ibo.data.buffer->buffer);
+	return m_ibo.data.count > 0 && m_ibo.data.buffer.valid() && m_ibo.data.buffer->buffer != vk::Buffer();
 }
 } // namespace le::graphics

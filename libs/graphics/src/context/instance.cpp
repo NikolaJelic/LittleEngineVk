@@ -4,6 +4,8 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <core/ensure.hpp>
+#include <graphics/common.hpp>
+#include <graphics/context/device.hpp>
 #include <graphics/context/instance.hpp>
 
 [[maybe_unused]] static vk::DispatchLoaderDynamic g_dispatcher;
@@ -161,8 +163,8 @@ std::vector<PhysicalDevice> Instance::availableDevices(Span<std::string_view> re
 }
 
 void Instance::destroy() {
-	if (!default_v(m_instance)) {
-		if (!default_v(m_messenger)) {
+	if (!Device::default_v(m_instance)) {
+		if (!Device::default_v(m_messenger)) {
 			m_instance.destroy(m_messenger, nullptr, m_loader);
 			m_messenger = vk::DebugUtilsMessengerEXT();
 		}

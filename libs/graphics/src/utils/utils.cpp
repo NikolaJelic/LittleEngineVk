@@ -1,6 +1,8 @@
 #include <stb/stb_image.h>
 #include <core/log.hpp>
 #include <core/singleton.hpp>
+#include <graphics/common.hpp>
+#include <graphics/pipeline.hpp>
 #include <graphics/render_context.hpp>
 #include <graphics/shader.hpp>
 #include <graphics/utils/utils.hpp>
@@ -194,8 +196,8 @@ bytearray utils::convert(Span<u8> bytes) {
 	return ret;
 }
 
-RawImage utils::decompress(bytearray imgBytes, u8 channels) {
-	RawImage ret;
+Texture::RawImage utils::decompress(bytearray imgBytes, u8 channels) {
+	Texture::RawImage ret;
 	int ch;
 	auto pIn = reinterpret_cast<stbi_uc const*>(imgBytes.data());
 	auto pOut = stbi_load_from_memory(pIn, (int)imgBytes.size(), &ret.width, &ret.height, &ch, (int)channels);
@@ -208,7 +210,7 @@ RawImage utils::decompress(bytearray imgBytes, u8 channels) {
 	return ret;
 }
 
-void utils::release(RawImage rawImage) {
+void utils::release(Texture::RawImage rawImage) {
 	if (!rawImage.bytes.empty()) {
 		stbi_image_free((void*)rawImage.bytes.data());
 	}
@@ -228,12 +230,12 @@ std::vector<bytearray> utils::loadCubemap(io::Reader& reader, io::Path const& pr
 	return ret;
 }
 
-std::vector<QueueFamily> utils::queueFamilies(PhysicalDevice const& device, vk::SurfaceKHR surface) {
+std::vector<QueueMultiplex::Family> utils::queueFamilies(PhysicalDevice const& device, vk::SurfaceKHR surface) {
 	using vkqf = vk::QueueFlagBits;
-	std::vector<QueueFamily> ret;
+	std::vector<QueueMultiplex::Family> ret;
 	u32 fidx = 0;
 	for (vk::QueueFamilyProperties const& props : device.queueFamilies) {
-		QueueFamily family;
+		QueueMultiplex::Family family;
 		family.familyIndex = fidx;
 		family.total = props.queueCount;
 		bool const bSurfaceSupport = device.device.getSurfaceSupportKHR(fidx, surface);

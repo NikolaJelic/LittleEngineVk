@@ -48,7 +48,7 @@ Texture::~Texture() {
 
 bool Texture::construct(CreateInfo const& info) {
 	destroy();
-	if (default_v(info.sampler)) {
+	if (Device::default_v(info.sampler)) {
 		return false;
 	}
 	Compressed const* pComp = std::get_if<Compressed>(&info.data);

@@ -1,4 +1,5 @@
 #include <core/utils.hpp>
+#include <graphics/common.hpp>
 #include <graphics/context/device.hpp>
 #include <graphics/context/memory.hpp>
 
@@ -107,7 +108,7 @@ View<Buffer> Memory::construct(Buffer::CreateInfo const& info, [[maybe_unused]] 
 }
 
 bool Memory::destroy(View<Buffer> buffer, [[maybe_unused]] bool bSilent) {
-	if (!buffer || default_v(buffer->buffer)) {
+	if (!buffer || Device::default_v(buffer->buffer)) {
 		return false;
 	}
 	auto lock = m_mutex.lock();
@@ -151,7 +152,7 @@ bool Memory::write(Buffer& out_buffer, void const* pData, Buffer::Span const& ra
 #endif
 		return false;
 	}
-	if (!default_v(out_buffer.info.memory) && !default_v(out_buffer.buffer)) {
+	if (!Device::default_v(out_buffer.info.memory) && !Device::default_v(out_buffer.buffer)) {
 		std::size_t const size = range.size == 0 ? (std::size_t)out_buffer.writeSize : range.size;
 		if (mapMemory(out_buffer)) {
 			void* pStart = (void*)((char*)out_buffer.pMap + range.offset);
@@ -206,7 +207,7 @@ View<Image> Memory::construct(Image::CreateInfo const& info) {
 }
 
 bool Memory::destroy(View<Image> image) {
-	if (!image || default_v(image->image)) {
+	if (!image || Device::default_v(image->image)) {
 		return false;
 	}
 	auto lock = m_mutex.lock();

@@ -1,5 +1,8 @@
 #pragma once
-#include <graphics/types.hpp>
+#include <core/ref.hpp>
+#include <core/span.hpp>
+#include <core/std_types.hpp>
+#include <vulkan/vulkan.hpp>
 
 namespace le::graphics {
 struct PhysicalDevice final {

@@ -8,11 +8,15 @@
 #include <core/threads.hpp>
 #include <core/time.hpp>
 #include <core/view.hpp>
-#include <graphics/types.hpp>
+#include <graphics/context/memory_types.hpp>
 #include <kt/async_queue/async_queue.hpp>
 
 namespace le::graphics {
 class Memory;
+
+constexpr vk::DeviceSize operator""_MB(unsigned long long size) {
+	return size << 20;
+}
 
 class Transfer final {
   public:
