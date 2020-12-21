@@ -9,6 +9,7 @@ namespace le::graphics {
 class Device;
 class Shader;
 class CommandBuffer;
+class VRAM;
 
 struct VertexInputInfo {
 	std::vector<vk::VertexInputBindingDescription> bindings;

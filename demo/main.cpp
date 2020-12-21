@@ -9,6 +9,7 @@
 #include <graphics/mesh.hpp>
 #include <graphics/render_context.hpp>
 #include <graphics/shader.hpp>
+#include <graphics/shader_buffer.hpp>
 #include <graphics/texture.hpp>
 #include <graphics/utils/utils.hpp>
 #include <window/desktop_instance.hpp>
@@ -187,12 +188,6 @@ struct TexturedMaterial : Material {
 	}
 };
 
-struct Prop2 {
-	Ref<Transform> transform;
-	Ref<graphics::Mesh> mesh;
-	Ref<Material> material;
-};
-
 struct Font {
 	io::Path atlasID;
 	io::Path samplerID;
@@ -292,7 +287,7 @@ struct Skybox {
 	CView<graphics::Texture> cubemap;
 
 	bool ready() const {
-		return cubemap && cubemap->ready();
+		return mesh && cubemap && cubemap->ready();
 	}
 	void update(graphics::DescriptorSet& set, CView<graphics::Buffer> vp) const {
 		if (ready()) {
@@ -309,9 +304,78 @@ struct Skybox {
 		}
 	}
 };
+
+struct Prop2 {
+	graphics::ShaderBuffer<glm::mat4, false> m;
+	Transform transform;
+	View<graphics::Mesh> mesh;
+	View<Material> material;
+};
+
 struct Scene {
+	using PropMap = std::unordered_map<Ref<graphics::Pipeline>, std::vector<Prop2>>;
+	struct SetRefs {
+		graphics::SetFactory& vp;
+		graphics::SetFactory& m;
+		graphics::SetFactory& mat;
+		graphics::SetFactory& sky;
+	};
+	struct PipeRefs {
+		graphics::Pipeline& main;
+		graphics::Pipeline& sky;
+	};
+
+	std::optional<graphics::ShaderBuffer<VP, false>> vp;
 	Skybox skybox;
-	std::unordered_map<Ref<graphics::Pipeline>, std::vector<Prop2>> props;
+	PropMap props;
+	PropMap ui;
+
+	void update(SetRefs sets) {
+		vp->write();
+		vp->update(sets.vp.front(), 0);
+		vp->update(sets.sky.front(), 0);
+		vp->swap();
+		sets.sky.front().updateTextures(1, *skybox.cubemap);
+		update(ui, sets, update(props, sets, 0));
+	}
+
+	void draw(graphics::CommandBuffer& out_cb, SetRefs sets, PipeRefs pipes) {
+		skybox.draw(out_cb, pipes.sky, sets.sky.front());
+		out_cb.bindSets(pipes.main.layout(), sets.vp.front().get(), sets.vp.front().setNumber());
+		draw(ui, out_cb, sets, draw(props, out_cb, sets, 0));
+	}
+
+	static std::size_t update(PropMap& out_map, SetRefs sets, std::size_t idx) {
+		for (auto& [p, props] : out_map) {
+			for (auto& prop : props) {
+				prop.m.set(prop.transform.model());
+				prop.m.update(sets.m.at(idx), 0);
+				prop.m.swap();
+				prop.material->write(sets.mat.at(idx));
+				++idx;
+			}
+		}
+		return idx;
+	}
+
+	static std::size_t draw(PropMap const& map, graphics::CommandBuffer& out_cb, SetRefs sets, std::size_t idx) {
+		for (auto const& [p, props] : map) {
+			graphics::Pipeline& pi = p;
+			out_cb.bindPipe(pi);
+			for (auto const& prop : props) {
+				out_cb.bindSets(pi.layout(), sets.m.at(idx).get(), sets.m.at(idx).setNumber());
+				prop.material->bind(out_cb, pi, sets.mat.at(idx));
+				out_cb.bindVBO(prop.mesh->vbo().buffer, prop.mesh->ibo().buffer);
+				if (prop.mesh->hasIndices()) {
+					out_cb.drawIndexed(prop.mesh->ibo().count);
+				} else {
+					out_cb.draw(prop.mesh->vbo().count);
+				}
+				++idx;
+			}
+		}
+		return idx;
+	}
 };
 
 GPULister g_gpuLister;
@@ -392,7 +456,6 @@ int main(int argc, char** argv) {
 			graphics::Geometry gcube = graphics::makeCube(0.5f);
 			auto const skyCubeI = gcube.indices;
 			auto const skyCubeV = gcube.positions();
-			VP vp;
 			graphics::Mesh mesh0("cube", boot.vram, graphics::Mesh::Type::eStatic);
 			graphics::Mesh mesh1("cone", boot.vram, graphics::Mesh::Type::eStatic);
 			graphics::Mesh skyCube("sky_cube", boot.vram, graphics::Mesh::Type::eStatic);
@@ -448,11 +511,30 @@ int main(int argc, char** argv) {
 			texR.wait();
 			winst.show();
 			Flags flags;
-			std::array<Transform, 4> tr;
-			tr[1].position({-5.0f, -1.0f, -2.0f});
-			tr[2].position({0.0f, -2.0f, -3.0f});
 			time::Point t = time::now();
 			glm::vec3 camPos = {0.0f, 2.0f, 4.0f};
+
+			TexturedMaterial texMat;
+			texMat.diffuse = texC;
+			TexturedMaterial fontMat;
+			fontMat.diffuse = *font.atlas;
+			Material mat;
+			Scene scene;
+			scene.vp = graphics::TBuf<VP, false>(boot.vram, "vp", {});
+			scene.skybox.mesh = skyCube;
+			scene.skybox.cubemap = sky;
+			auto mbuf = [&boot](std::string_view name) { return graphics::TBuf<glm::mat4, false>(boot.vram, name, {}); };
+			scene.props[*pipeTex].push_back(Prop2{mbuf("prop_tex"), {}, mesh0, texMat});
+			Prop2 p1{mbuf("prop_1"), {}, mesh0, mat};
+			p1.transform.position({-5.0f, -1.0f, -2.0f});
+			scene.props[*pipe].push_back(std::move(p1));
+			Prop2 p2{mbuf("prop_2"), {}, mesh1, mat};
+			p2.transform.position({1.0f, -2.0f, -3.0f});
+			scene.props[*pipe].push_back(std::move(p2));
+			scene.ui[*pipeUI].push_back(Prop2{mbuf("prop_ui"), {}, *text.mesh, fontMat});
+
+			graphics::TBuf<std::vector<glm::vec3>, true> foo(boot.vram, "foo", {});
+
 			while (true) {
 				Time_s dt = time::now() - t;
 				t = time::now();
@@ -476,75 +558,33 @@ int main(int argc, char** argv) {
 				// tick
 				threads::sleep(5ms);
 				auto const fb = winst.framebufferSize();
-				vp.mat_p = glm::perspective(glm::radians(45.0f), (f32)fb.x / std::max((f32)fb.y, 1.0f), 0.1f, 100.0f);
+				scene.vp->get().mat_p = glm::perspective(glm::radians(45.0f), (f32)fb.x / std::max((f32)fb.y, 1.0f), 0.1f, 100.0f);
 				{
 					f32 const w = (f32)fb.x * 0.5f;
 					f32 const h = (f32)fb.y * 0.5f;
-					vp.mat_ui = glm::ortho(-w, w, -h, h, -1.0f, 1.0f);
+					scene.vp->get().mat_ui = glm::ortho(-w, w, -h, h, -1.0f, 1.0f);
 				}
 				// camera
 				{
 					glm::vec3 const moveDir = glm::normalize(glm::cross(camPos, graphics::g_nUp));
 					camPos += moveDir * dt.count() * 0.75f;
-					vp.mat_v = glm::lookAt(camPos, {}, graphics::g_nUp);
+					scene.vp->get().mat_v = glm::lookAt(camPos, {}, graphics::g_nUp);
 				}
-				tr[0].rotate(glm::radians(-180.0f) * dt.count(), glm::normalize(glm::vec3(1.0f)));
-				tr[1].rotate(glm::radians(360.0f) * dt.count(), graphics::g_nUp);
-
-				TexturedMaterial texMat;
-				texMat.diffuse = texC;
-				TexturedMaterial fontMat;
-				fontMat.diffuse = *font.atlas;
-				Material mat;
-				Scene scene;
-				scene.skybox.mesh = skyCube;
-				scene.skybox.cubemap = sky;
-				scene.props[*pipeTex].push_back(Prop2{tr[0], mesh0, texMat});
-				scene.props[*pipe].push_back(Prop2{tr[1], mesh0, mat});
-				scene.props[*pipe].push_back(Prop2{tr[2], mesh1, mat});
-				scene.props[*pipeUI].push_back(Prop2{tr[3], *text.mesh, fontMat});
+				scene.props[*pipeTex].front().transform.rotate(glm::radians(-180.0f) * dt.count(), glm::normalize(glm::vec3(1.0f)));
+				scene.props[*pipe].front().transform.rotate(glm::radians(360.0f) * dt.count(), graphics::g_nUp);
 
 				// render
 				if (context.waitForFrame()) {
 					// write / update
 					auto& smain = layouts["main"];
 					auto& ssky = layouts["skybox"];
-					smain[0].front().writeBuffer(0, vp);
-					scene.skybox.update(ssky[0].front(), smain[0].front().buffers(0).front());
-					std::size_t idx = 0;
-					for (auto& [p, props] : scene.props) {
-						for (auto& prop : props) {
-							Material& mat = prop.material;
-							Transform& t = prop.transform;
-							smain[1].at(idx).writeBuffer(0, t.model());
-							mat.write(smain[2].at(idx));
-							++idx;
-						}
-					}
+					scene.update({smain[0], smain[1], smain[2], ssky[0]});
+
 					// draw
 					if (auto r = context.render(Colour(0x040404ff))) {
 						auto& cb = r->primary();
 						cb.setViewportScissor(context.viewport(), context.scissor());
-						scene.skybox.draw(cb, pipeSky, ssky[0].front());
-						cb.bindSets(pipe->layout(), smain[0].front().get(), smain[0].front().setNumber());
-						std::size_t idx = 0;
-						for (auto& [p, props] : scene.props) {
-							graphics::Pipeline& pi = p;
-							cb.bindPipe(pi);
-							for (auto const& prop : props) {
-								Material& mat = prop.material;
-								graphics::Mesh& m = prop.mesh;
-								cb.bindSets(pipe->layout(), smain[1].at(idx).get(), smain[1].at(idx).setNumber());
-								mat.bind(cb, pi, smain[2].at(idx));
-								cb.bindVBO(m.vbo().buffer, m.ibo().buffer);
-								if (m.hasIndices()) {
-									cb.drawIndexed(m.ibo().count);
-								} else {
-									cb.draw(m.vbo().count);
-								}
-								++idx;
-							}
-						}
+						scene.draw(cb, {smain[0], smain[1], smain[2], ssky[0]}, {pipe, pipeSky});
 						layouts.swap();
 					}
 				}

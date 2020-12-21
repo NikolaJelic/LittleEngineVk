@@ -5,11 +5,11 @@
 #include <graphics/context/queue_multiplex.hpp>
 
 namespace le::graphics {
-template <typename T>
-using vAP = vk::ArrayProxy<T const> const&;
-
 class Device final {
   public:
+	template <typename T>
+	using vAP = vk::ArrayProxy<T const> const&;
+
 	enum class QSelect { eOptimal, eSingleFamily, eSingleQueue };
 	inline static constexpr std::array<std::string_view, 2> requiredExtensions = {VK_KHR_SWAPCHAIN_EXTENSION_NAME, VK_KHR_MAINTENANCE1_EXTENSION_NAME};
 

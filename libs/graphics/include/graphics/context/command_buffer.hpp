@@ -12,11 +12,10 @@ class DescriptorSet;
 struct Buffer;
 struct Image;
 
-template <typename T>
-using vAP = vk::ArrayProxy<T const> const&;
-
 class CommandBuffer {
   public:
+	template <typename T>
+	using vAP = vk::ArrayProxy<T const> const&;
 	using vBP = vk::PipelineBindPoint;
 	template <typename T>
 	using Duet = std::pair<T, T>;

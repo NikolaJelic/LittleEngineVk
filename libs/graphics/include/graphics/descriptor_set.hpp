@@ -9,7 +9,6 @@
 
 namespace le::graphics {
 class Device;
-class VRAM;
 class Texture;
 struct Buffer;
 struct Image;
@@ -29,7 +28,7 @@ class DescriptorSet {
 	};
 	struct CreateInfo;
 
-	DescriptorSet(VRAM& vram, CreateInfo const& info);
+	DescriptorSet(Device& device, CreateInfo const& info);
 	DescriptorSet(DescriptorSet&&) noexcept;
 	DescriptorSet& operator=(DescriptorSet&&) noexcept;
 	~DescriptorSet();
@@ -37,13 +36,7 @@ class DescriptorSet {
 	void index(std::size_t index);
 	void next();
 	vk::DescriptorSet get() const;
-	std::vector<CView<Buffer>> buffers(u32 binding) const;
 
-	template <typename T>
-	bool writeBuffer(u32 binding, T const& data, vk::DescriptorType type = vk::DescriptorType::eUniformBuffer);
-	template <typename T, typename Cont = Span<T>>
-	bool writeBuffers(u32 binding, Cont&& data, vk::DescriptorType type = vk::DescriptorType::eUniformBuffer);
-	bool writeBuffers(u32 binding, void* pData, std::size_t size, std::size_t count, vk::DescriptorType type = vk::DescriptorType::eUniformBuffer);
 	void updateBuffers(u32 binding, Span<CView<Buffer>> buffers, std::size_t size, vk::DescriptorType type = vk::DescriptorType::eUniformBuffer);
 	bool updateCIS(u32 binding, std::vector<CIS> cis);
 	bool updateTextures(u32 binding, Span<Texture> textures);
@@ -51,13 +44,15 @@ class DescriptorSet {
 	u32 setNumber() const noexcept;
 
   private:
+	template <typename T>
+	void update(u32 binding, vk::DescriptorType type, Span<T> writes);
+	void update(vk::WriteDescriptorSet set);
 	void destroy();
-	View<Buffer> resize(View<Buffer> old, std::size_t size, vk::DescriptorType type, std::string_view name) const;
 
 	struct Binding {
 		std::string name;
 		vk::DescriptorType type;
-		std::vector<View<Buffer>> buffers;
+		std::vector<CView<Buffer>> buffers;
 		std::vector<CIS> cis;
 		u32 count = 1;
 	};
@@ -73,8 +68,9 @@ class DescriptorSet {
 		u32 rotateCount = 1;
 		u32 setNumber = 0;
 	} m_storage;
-	Ref<VRAM> m_vram;
 	Ref<Device> m_device;
+
+	std::pair<Set&, Binding&> setBind(u32 bind, vk::DescriptorType type, u32 count);
 };
 
 struct DescriptorSet::CreateInfo {
@@ -88,7 +84,7 @@ class SetFactory {
   public:
 	struct CreateInfo;
 
-	SetFactory(VRAM& vram, CreateInfo const& info);
+	SetFactory(Device& device, CreateInfo const& info);
 
 	DescriptorSet& front();
 	DescriptorSet& at(std::size_t idx);
@@ -103,7 +99,6 @@ class SetFactory {
 		std::size_t rotateCount = 0;
 		u32 setNumber = 0;
 	} m_storage;
-	Ref<VRAM> m_vram;
 	Ref<Device> m_device;
 };
 
@@ -121,12 +116,20 @@ inline u32 DescriptorSet::setNumber() const noexcept {
 }
 
 template <typename T>
-bool DescriptorSet::writeBuffer(u32 binding, T const& data, vk::DescriptorType type) {
-	return writeBuffers(binding, (void*)&data, sizeof(T), 1, type);
-}
-template <typename T, typename Cont>
-bool DescriptorSet::writeBuffers(u32 binding, Cont&& data, vk::DescriptorType type) {
-	ENSURE(data.size() > 0, "Empty container");
-	return writeBuffers(binding, (void*)std::addressof(*data.begin()), sizeof(T), data.size(), type);
+void DescriptorSet::update(u32 binding, vk::DescriptorType type, Span<T> writes) {
+	vk::WriteDescriptorSet write;
+	write.dstSet = get();
+	write.dstBinding = binding;
+	write.dstArrayElement = 0;
+	write.descriptorType = type;
+	write.descriptorCount = (u32)writes.size();
+	if constexpr (std::is_same_v<T, vk::DescriptorImageInfo>) {
+		write.pImageInfo = writes.data();
+	} else if constexpr (std::is_same_v<T, vk::DescriptorBufferInfo>) {
+		write.pBufferInfo = writes.data();
+	} else {
+		static_assert(false_v<T>, "Invalid type");
+	}
+	update(write);
 }
 } // namespace le::graphics

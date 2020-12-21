@@ -81,7 +81,7 @@ SetFactory Pipeline::makeSetFactory(u32 set, std::size_t rotateCount) const {
 		rotateCount = m_metadata.createInfo.rotateCount;
 	}
 	SetFactory::CreateInfo const factoryInfo{f.setLayouts[(std::size_t)set], f.bindingInfos[(std::size_t)set], rotateCount, set};
-	return SetFactory(m_vram, factoryInfo);
+	return SetFactory(m_device, factoryInfo);
 }
 
 bool Pipeline::construct(bool bFixed) {
